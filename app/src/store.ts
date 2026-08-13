@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import type { Level } from './theme';
 import type { Fuel, EcoCode } from './lib/eco';
 import { sync, HAS_BACKEND } from './lib/api';
+import { getAccessToken } from './lib/supabase';
 
 export interface Vehicle {
   id: string; name: string; short: string; initial: string;
@@ -38,6 +39,7 @@ interface S {
   mileageAskDismissed: Record<string, boolean>;
   hydrated: boolean;                 // true una vez cargados datos reales del backend
   historyLoaded: Record<string, boolean>;
+  maintenanceLoaded: Record<string, boolean>;
 
   currentVehicle: () => Vehicle | undefined;
   maintenanceFor: (id: string) => MaintenanceItem[];
@@ -61,6 +63,8 @@ interface S {
 
   hydrateFromBackend: () => Promise<void>;
   loadHistoryFor: (vehicleId: string) => Promise<void>;
+  loadMaintenanceFor: (vehicleId: string) => Promise<void>;
+  refreshMaintenance: (vehicleId: string) => Promise<void>;
   resetToDemo: () => void;
 }
 
@@ -70,6 +74,7 @@ const monthKeyNow = () => {
 };
 const dateLabelNow = () => new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
 const historyInFlight = new Set<string>(); // evita fetches duplicados si se llama varias veces seguidas
+const maintenanceInFlight = new Set<string>();
 
 // Datos de ejemplo — solo se usan en modo demo (sin backend real conectado)
 function demoSeed() {
@@ -155,12 +160,16 @@ export const useVigilante = create<S>((set, get) => ({
   mileageAskDismissed: {},
   hydrated: false,
   historyLoaded: {},
+  maintenanceLoaded: {},
 
   currentVehicle: () => {
     const { vehicles, currentVehicleId } = get();
     return vehicles.find(v => v.id === currentVehicleId) ?? vehicles[0];
   },
-  maintenanceFor: id => get().maintenance.filter(m => m.vehicleId === id),
+  maintenanceFor: id => {
+    get().loadMaintenanceFor(id);
+    return get().maintenance.filter(m => m.vehicleId === id);
+  },
   historyFor: id => {
     get().loadHistoryFor(id); // dispara la carga en segundo plano si hace falta (no bloquea)
     return get().history.filter(h => h.vehicleId === id);
@@ -203,7 +212,10 @@ export const useVigilante = create<S>((set, get) => ({
       };
       if (isNew) {
         sync.createVehicle(payload)
-          .then((res: any) => { if (res?.id && res.id !== id) get().remapVehicleId(id, res.id); })
+          .then((res: any) => {
+            if (res?.id && res.id !== id) get().remapVehicleId(id, res.id);
+            get().loadMaintenanceFor(res?.id ?? id);
+          })
           .catch(e => console.warn('No se pudo guardar el vehículo en el backend:', e));
       } else {
         sync.updateVehicle(id, payload).catch(e => console.warn('No se pudo actualizar el vehículo en el backend:', e));
@@ -231,25 +243,32 @@ export const useVigilante = create<S>((set, get) => ({
   dismissMileageAsk: id =>
     set(s => ({ mileageAskDismissed: { ...s.mileageAskDismissed, [id]: true } })),
 
-  addPhoto: (mid, p) =>
-    set(s => ({ maintenance: s.maintenance.map(m => (m.id === mid ? { ...m, photos: [...m.photos, p] } : m)) })),
+  addPhoto: (mid, p) => {
+    set(s => ({ maintenance: s.maintenance.map(m => (m.id === mid ? { ...m, photos: [...m.photos, p] } : m)) }));
+    if (HAS_BACKEND) sync.addMaintenancePhoto(mid, p).catch(e => console.warn('No se pudo subir la foto:', e));
+  },
 
-  removePhoto: (mid, index) =>
+  removePhoto: (mid, index) => {
     set(s => ({
       maintenance: s.maintenance.map(m =>
         m.id === mid ? { ...m, photos: m.photos.filter((_, i) => i !== index) } : m
       ),
-    })),
+    }));
+    if (HAS_BACKEND) sync.removeMaintenancePhoto(mid, index).catch(e => console.warn('No se pudo borrar la foto:', e));
+  },
 
-  assignWorkshop: (mid, name) =>
-    set(s => ({ maintenance: s.maintenance.map(m => (m.id === mid ? { ...m, workshop: name } : m)) })),
+  assignWorkshop: (mid, name) => {
+    set(s => ({ maintenance: s.maintenance.map(m => (m.id === mid ? { ...m, workshop: name } : m)) }));
+    if (HAS_BACKEND) sync.updateMaintenance(mid, { workshop: name }).catch(e => console.warn('No se pudo asignar el taller:', e));
+  },
 
   addLog: e => set(s => ({ history: [{ ...e, id: `h${Date.now()}` }, ...s.history] })),
 
   markDone: mid => {
     const m = get().maintenance.find(x => x.id === mid);
     if (!m) return;
-    const car = get().vehicles.find(v => v.id === m.vehicleId)!;
+    const car = get().vehicles.find(v => v.id === m.vehicleId);
+    if (!car) return;
     get().addLog({
       vehicleId: m.vehicleId, emoji: m.emoji, title: m.title,
       dateLabel: dateLabelNow(), monthKey: monthKeyNow(),
@@ -261,6 +280,11 @@ export const useVigilante = create<S>((set, get) => ({
         x.id === mid ? { ...x, progress: 0.02, level: 'ok' as Level, remainingText: '✓ hoy' } : x
       ),
     }));
+    if (HAS_BACKEND) {
+      sync.maintenanceDone(mid)
+        .then(() => get().refreshMaintenance(m.vehicleId)) // recalcula con los datos reales del servidor
+        .catch(e => console.warn('No se pudo marcar como hecho en el backend:', e));
+    }
   },
 
   addWorkshop: w => set(s => ({ workshops: [...s.workshops, { ...w, id: `w${Date.now()}` }] })),
@@ -282,7 +306,7 @@ export const useVigilante = create<S>((set, get) => ({
       set({
         vehicles,
         currentVehicleId: vehicles[0]?.id ?? '',
-        maintenance: [], history: [], historyLoaded: {},
+        maintenance: [], history: [], historyLoaded: {}, maintenanceLoaded: {},
         hydrated: true,
       });
     } catch (e) {
@@ -292,6 +316,7 @@ export const useVigilante = create<S>((set, get) => ({
 
   loadHistoryFor: async (vehicleId: string) => {
     if (!HAS_BACKEND || get().historyLoaded[vehicleId] || historyInFlight.has(vehicleId)) return;
+    if (!(await getAccessToken())) return; // modo demo con backend configurado pero sin sesión real
     historyInFlight.add(vehicleId);
     try {
       const raw = await sync.history(vehicleId) as any[];
@@ -312,5 +337,32 @@ export const useVigilante = create<S>((set, get) => ({
     }
   },
 
-  resetToDemo: () => set({ ...demoSeed(), currentVehicleId: 'merc', hydrated: false, historyLoaded: {} }),
+  loadMaintenanceFor: async (vehicleId: string) => {
+    if (!HAS_BACKEND || get().maintenanceLoaded[vehicleId] || maintenanceInFlight.has(vehicleId)) return;
+    if (!(await getAccessToken())) return;
+    maintenanceInFlight.add(vehicleId);
+    try {
+      const raw = await sync.maintenance(vehicleId) as MaintenanceItem[];
+      set(s => ({
+        maintenance: [...s.maintenance.filter(m => m.vehicleId !== vehicleId), ...raw],
+        maintenanceLoaded: { ...s.maintenanceLoaded, [vehicleId]: true },
+      }));
+    } catch (e) {
+      console.warn('No se pudieron cargar los mantenimientos del backend:', e);
+    } finally {
+      maintenanceInFlight.delete(vehicleId);
+    }
+  },
+
+  refreshMaintenance: async (vehicleId: string) => {
+    if (!HAS_BACKEND) return;
+    try {
+      const raw = await sync.maintenance(vehicleId) as MaintenanceItem[];
+      set(s => ({ maintenance: [...s.maintenance.filter(m => m.vehicleId !== vehicleId), ...raw] }));
+    } catch (e) {
+      console.warn('No se pudo refrescar el mantenimiento:', e);
+    }
+  },
+
+  resetToDemo: () => set({ ...demoSeed(), currentVehicleId: 'merc', hydrated: false, historyLoaded: {}, maintenanceLoaded: {} }),
 }));

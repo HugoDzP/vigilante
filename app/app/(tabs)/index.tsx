@@ -9,7 +9,7 @@ import { T } from '../../src/theme';
 import { useVigilante } from '../../src/store';
 import { pickAndCompress } from '../../src/lib/images';
 import { sync, HAS_BACKEND } from '../../src/lib/api';
-import { Card, HealthGauge, MaintenanceCard, GarageSwitcher, Eyebrow, ScreenTitle, EcoBadge, EmptyGarage } from '../../src/components';
+import { Card, HealthGauge, MaintenanceCard, GarageSwitcher, Eyebrow, ScreenTitle, EcoBadge, EmptyGarage, PulseRing } from '../../src/components';
 
 const fmt = (n: number) => n.toLocaleString('es-ES');
 
@@ -65,7 +65,8 @@ export default function Dashboard() {
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, borderRadius: 18,
                   marginBottom: 14, borderWidth: 1, borderColor: 'rgba(255,100,120,0.35)' }}>
                 <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: T.dangerDim,
-                  alignItems: 'center', justifyContent: 'center' }}>
+                  alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                  <PulseRing color={T.danger} size={38} borderRadius={12} />
                   <Ionicons name="warning" size={18} color={T.danger} />
                 </View>
                 <View style={{ flex: 1 }}>

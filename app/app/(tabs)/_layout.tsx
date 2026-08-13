@@ -25,12 +25,13 @@ export default function TabsLayout() {
         },
         tabBarStyle: {
           position: 'absolute',
-          left: 16,
-          right: 16,
+          left: 22,
+          right: 22,
           // En vez de un número fijo, usamos el inset real del dispositivo (home indicator,
-          // esquinas redondeadas...) + un margen — así en iPhones con un área segura más
-          // grande (como el Air) la barra no queda pegada al borde ni se la "come" la curva.
-          bottom: Math.max(insets.bottom, 8) + 10,
+          // esquinas redondeadas...) — el margen extra es pequeño a propósito: cuanto más
+          // baja queda la barra, más estrecha tiene que ser para no meterse en la curva
+          // de las esquinas (iPhone Air y similares).
+          bottom: Math.max(insets.bottom, 8) + 2,
           height: 62,
           borderRadius: 26,
           borderTopWidth: 0,

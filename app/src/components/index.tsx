@@ -3,7 +3,7 @@ import React, { useEffect } from 'react';
 import { View, Text, Pressable, ScrollView, TextInput, ViewStyle, TextInputProps } from 'react-native';
 import Svg, { Circle, Path, Defs, LinearGradient as SvgGrad, Stop } from 'react-native-svg';
 import Animated, {
-  useSharedValue, useAnimatedProps, useAnimatedStyle, withTiming, withDelay, Easing,
+  useSharedValue, useAnimatedProps, useAnimatedStyle, withTiming, withDelay, withRepeat, Easing,
 } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -209,6 +209,31 @@ export function Segmented<Tv extends string>({ options, value, onChange }: {
         );
       })}
     </View>
+  );
+}
+
+// ---------- Anillo de onda para avisos urgentes ----------
+export function PulseRing({ color = T.danger, size = 38, borderRadius = 12 }: {
+  color?: string; size?: number; borderRadius?: number;
+}) {
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(0.55);
+
+  React.useEffect(() => {
+    scale.value = withRepeat(withTiming(1.4, { duration: 2000, easing: Easing.out(Easing.ease) }), -1, false);
+    opacity.value = withRepeat(withTiming(0, { duration: 2000, easing: Easing.out(Easing.ease) }), -1, false);
+  }, []);
+
+  const style = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: opacity.value,
+  }));
+
+  return (
+    <Animated.View pointerEvents="none" style={[{
+      position: 'absolute', top: 0, left: 0, width: size, height: size,
+      borderRadius, borderWidth: 1.5, borderColor: color,
+    }, style]} />
   );
 }
 

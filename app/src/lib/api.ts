@@ -91,4 +91,13 @@ export const sync = {
   pushLog: (log: unknown) => req('/api/maintenance', { method: 'POST', body: JSON.stringify(log) }),
   pushMileage: (vehicleId: string, km: number) =>
     req('/api/mileage', { method: 'POST', body: JSON.stringify({ vehicleId, km }) }),
+
+  // Predicciones de mantenimiento
+  maintenance: (vehicleId: string) => req(`/api/vehicles/${vehicleId}/maintenance`),
+  updateMaintenance: (id: string, v: unknown) => req(`/api/maintenance/${id}`, { method: 'PUT', body: JSON.stringify(v) }),
+  addMaintenancePhoto: (id: string, photo: { uri: string; sizeLabel: string }) =>
+    req(`/api/maintenance/${id}/photos`, { method: 'POST', body: JSON.stringify(photo) }),
+  removeMaintenancePhoto: (id: string, index: number) =>
+    req(`/api/maintenance/${id}/photos/${index}`, { method: 'DELETE' }),
+  maintenanceDone: (id: string) => req(`/api/maintenance/${id}/done`, { method: 'POST' }),
 };
