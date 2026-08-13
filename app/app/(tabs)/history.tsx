@@ -164,7 +164,7 @@ export default function History() {
                   <View style={{ flex: 1, width: 2, backgroundColor: T.stroke, marginTop: 4 }} />
                 </View>
                 <Pressable style={({ pressed }) => ({ flex: 1, transform: [{ scale: pressed ? 0.975 : 1 }] })}
-                  onPress={() => e.maintenanceId && router.push(`/maintenance/${e.maintenanceId}`)}>
+                  onPress={() => e.maintenanceId && router.push({ pathname: '/maintenance/[id]', params: { id: e.maintenanceId } })}>
                   <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14 }}>
                     {e.photos[0] ? (
                       <Image source={{ uri: e.photos[0] }} style={{ width: 56, height: 56, borderRadius: 14 }} />

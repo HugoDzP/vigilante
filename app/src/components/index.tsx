@@ -129,7 +129,7 @@ export function MaintenanceCard({ item }: { item: MaintenanceItem }) {
   const lv = LEVEL[item.level];
   return (
     <Pressable
-      onPress={() => router.push(`/maintenance/${item.id}`)}
+      onPress={() => router.push({ pathname: '/maintenance/[id]', params: { id: item.id } })}
       style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.975 : 1 }], marginBottom: 10 })}
     >
       <Card style={{
@@ -178,7 +178,7 @@ export function GarageSwitcher() {
           </Pressable>
         );
       })}
-      <Pressable onPress={() => router.push('/vehicle/form')}
+      <Pressable onPress={() => router.push({ pathname: '/vehicle/form' })}
         style={{
           flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 14,
           borderRadius: 99, borderWidth: 1, borderStyle: 'dashed', borderColor: T.stroke,
@@ -253,7 +253,7 @@ export function EmptyGarage({ message }: { message?: string }) {
       <Text style={{ color: T.steel, fontSize: 13.5, textAlign: 'center', lineHeight: 20, maxWidth: 280 }}>
         {message ?? 'Añade tu primer vehículo y Vigilante empezará a seguirle la pista: mantenimientos, kilometraje y más.'}
       </Text>
-      <Pressable onPress={() => router.push('/vehicle/form')}
+      <Pressable onPress={() => router.push({ pathname: '/vehicle/form' })}
         style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.97 : 1 }], marginTop: 8 })}>
         <LinearGradient colors={[T.mint, '#1FC987']}
           style={{ paddingHorizontal: 22, height: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}>

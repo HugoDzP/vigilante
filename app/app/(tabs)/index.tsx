@@ -59,7 +59,7 @@ export default function Dashboard() {
 
         {urgent && (
           <Animated.View entering={FadeInUp.delay(80).duration(500)}>
-            <Pressable onPress={() => router.push(`/maintenance/${urgent.id}`)}>
+            <Pressable onPress={() => router.push({ pathname: '/maintenance/[id]', params: { id: urgent.id } })}>
               <LinearGradient colors={['rgba(255,100,120,0.14)', 'rgba(255,174,77,0.08)']}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, borderRadius: 18,

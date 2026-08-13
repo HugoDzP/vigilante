@@ -12,4 +12,4 @@ if DATABASE_URL.startswith("postgres://"):
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")   # p.ej. https://xxxx.supabase.co — para verificar JWTs vía JWKS
 SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET", "")  # solo fallback, sistema legado HS256
 GOOGLE_PLACES_KEY = os.environ.get("GOOGLE_PLACES_KEY", "")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")  # OCR de facturas — capa gratuita de Gemini

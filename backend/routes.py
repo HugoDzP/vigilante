@@ -6,7 +6,7 @@ from auth import require_auth
 from models import db, Vehicle, LogEntry, Workshop, MileageLog, MaintenanceItem, default_maintenance_for
 from ocr import parse_invoice_image
 from places import search_workshops
-from config import ANTHROPIC_API_KEY, GOOGLE_PLACES_KEY
+from config import GEMINI_API_KEY, GOOGLE_PLACES_KEY
 
 api = Blueprint("api", __name__, url_prefix="/api")
 
@@ -82,7 +82,7 @@ def list_maintenance(vid):
                 .order_by(LogEntry.date.desc()).limit(3).all())
         past_dicts = [{"title": p.title, "meta": f"{p.mileage:,} km · {p.date.strftime('%b %Y')}".replace(",", "."),
                        "cost": f"{p.cost:g} €"} for p in past]
-        out.append(it.to_dict(v.mileage, past_dicts))
+        out.append(it.to_dict(v, past_dicts))
     return jsonify(out)
 
 
@@ -96,7 +96,7 @@ def update_maintenance(mid):
     if "estCost" in d: it.est_cost = d["estCost"]
     db.session.commit()
     v = Vehicle.query.get(it.vehicle_id)
-    return jsonify(it.to_dict(v.mileage if v else 0))
+    return jsonify(it.to_dict(v))
 
 
 @api.post("/maintenance/<mid>/photos")
@@ -109,7 +109,7 @@ def add_maintenance_photo(mid):
     it.photos = photos
     db.session.commit()
     v = Vehicle.query.get(it.vehicle_id)
-    return jsonify(it.to_dict(v.mileage if v else 0))
+    return jsonify(it.to_dict(v))
 
 
 @api.delete("/maintenance/<mid>/photos/<int:index>")
@@ -122,7 +122,7 @@ def remove_maintenance_photo(mid, index):
     it.photos = photos
     db.session.commit()
     v = Vehicle.query.get(it.vehicle_id)
-    return jsonify(it.to_dict(v.mileage if v else 0))
+    return jsonify(it.to_dict(v))
 
 
 @api.post("/maintenance/<mid>/done")
@@ -141,11 +141,11 @@ def mark_maintenance_done(mid):
     # reinicia el ciclo: "hecho hoy" a este kilometraje/fecha
     if it.interval_km:
         it.last_done_km = v.mileage
-    if it.interval_days:
+    if it.interval_days or it.kind == "itv":
         it.last_done_date = date.today()
     it.photos = []
     db.session.commit()
-    return jsonify(it.to_dict(v.mileage)), 200
+    return jsonify(it.to_dict(v)), 200
 
 
 @api.post("/maintenance")
@@ -239,7 +239,7 @@ def parse_text():
 @api.post("/parse-invoice")
 @require_auth
 def parse_invoice():
-    if not ANTHROPIC_API_KEY:
+    if not GEMINI_API_KEY:
         return jsonify(error="OCR no configurado"), 503
     d = request.get_json(force=True)
     image_b64 = d.get("image", "")
