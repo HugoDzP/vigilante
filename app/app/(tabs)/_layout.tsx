@@ -15,25 +15,22 @@ export default function TabsLayout() {
         tabBarActiveTintColor: T.mint,
         tabBarInactiveTintColor: T.steelDim,
         tabBarLabelStyle: { fontSize: 10, fontWeight: '600', letterSpacing: 0.5 },
-        // Centra icono+etiqueta dentro de cada pestaña, sin depender del padding
-        // automático que React Navigation añade para el safe-area (que aquí gestionamos a mano).
+        // Centra icono+etiqueta dentro de cada pestaña. Al hacer la barra más alta,
+        // el área táctil de cada pestaña crece con ella (React Navigation la hace
+        // ocupar toda la altura/ancho asignados), así cuesta menos acertar.
         tabBarItemStyle: {
           justifyContent: 'center',
           alignItems: 'center',
-          paddingTop: 6,
-          paddingBottom: 0,
         },
         tabBarStyle: {
           position: 'absolute',
-          left: 22,
-          right: 22,
-          // En vez de un número fijo, usamos el inset real del dispositivo (home indicator,
-          // esquinas redondeadas...) — el margen extra es pequeño a propósito: cuanto más
-          // baja queda la barra, más estrecha tiene que ser para no meterse en la curva
-          // de las esquinas (iPhone Air y similares).
-          bottom: Math.max(insets.bottom, 8) + 2,
-          height: 62,
-          borderRadius: 26,
+          left: 30,
+          right: 30,
+          // Pegada casi del todo al borde inferior seguro del dispositivo — solo
+          // un pequeño margen de aire, no un salto grande como antes.
+          bottom: Math.max(insets.bottom - 6, 4),
+          height: 70,
+          borderRadius: 28,
           borderTopWidth: 0,
           borderWidth: 1,
           borderColor: T.stroke,
@@ -44,7 +41,7 @@ export default function TabsLayout() {
           elevation: 12,
         },
         tabBarBackground: () => (
-          <BlurView intensity={40} tint="dark" style={{ flex: 1, borderRadius: 26, overflow: 'hidden' }} />
+          <BlurView intensity={40} tint="dark" style={{ flex: 1, borderRadius: 28, overflow: 'hidden' }} />
         ),
       }}
     >
