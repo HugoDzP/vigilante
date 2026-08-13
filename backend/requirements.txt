@@ -3,6 +3,7 @@ flask-cors==4.0.1
 flask-sqlalchemy==3.1.1
 psycopg2-binary==2.9.9
 PyJWT==2.9.0
+cryptography==43.0.1
 gunicorn==22.0.0
 requests==2.32.3
 anthropic==0.34.2
