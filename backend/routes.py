@@ -3,7 +3,7 @@ import re
 from datetime import date, datetime
 from flask import Blueprint, request, jsonify, g
 from auth import require_auth
-from models import db, Vehicle, LogEntry, Workshop, MileageLog
+from models import db, Vehicle, LogEntry, Workshop, MileageLog, MaintenanceItem, default_maintenance_for
 from ocr import parse_invoice_image
 from places import search_workshops
 from config import ANTHROPIC_API_KEY, GOOGLE_PLACES_KEY
@@ -33,6 +33,9 @@ def create_vehicle():
         eco_label=d.get("label"), photo_url=d.get("photoUri"),
     )
     db.session.add(v)
+    db.session.flush()  # asigna v.id antes de crear los mantenimientos que lo referencian
+    for item in default_maintenance_for(v):
+        db.session.add(item)
     db.session.commit()
     return jsonify(v.to_dict()), 201
 
@@ -63,6 +66,86 @@ def history(vid):
             .filter_by(user_id=g.user_id, vehicle_id=vid)
             .order_by(LogEntry.date.desc()).all())
     return jsonify([l.to_dict() for l in logs])
+
+
+# ---------------- Predicciones de mantenimiento ----------------
+
+@api.get("/vehicles/<vid>/maintenance")
+@require_auth
+def list_maintenance(vid):
+    v = Vehicle.query.filter_by(id=vid, user_id=g.user_id).first_or_404()
+    items = MaintenanceItem.query.filter_by(vehicle_id=vid, user_id=g.user_id).all()
+    out = []
+    for it in items:
+        past = (LogEntry.query
+                .filter_by(user_id=g.user_id, vehicle_id=vid, title=it.title)
+                .order_by(LogEntry.date.desc()).limit(3).all())
+        past_dicts = [{"title": p.title, "meta": f"{p.mileage:,} km · {p.date.strftime('%b %Y')}".replace(",", "."),
+                       "cost": f"{p.cost:g} €"} for p in past]
+        out.append(it.to_dict(v.mileage, past_dicts))
+    return jsonify(out)
+
+
+@api.put("/maintenance/<mid>")
+@require_auth
+def update_maintenance(mid):
+    it = MaintenanceItem.query.filter_by(id=mid, user_id=g.user_id).first_or_404()
+    d = request.get_json(force=True)
+    if "workshop" in d: it.workshop = d["workshop"]
+    if "notes" in d: it.notes = d["notes"]
+    if "estCost" in d: it.est_cost = d["estCost"]
+    db.session.commit()
+    v = Vehicle.query.get(it.vehicle_id)
+    return jsonify(it.to_dict(v.mileage if v else 0))
+
+
+@api.post("/maintenance/<mid>/photos")
+@require_auth
+def add_maintenance_photo(mid):
+    it = MaintenanceItem.query.filter_by(id=mid, user_id=g.user_id).first_or_404()
+    d = request.get_json(force=True)
+    photos = list(it.photos or [])
+    photos.append({"uri": d.get("uri"), "sizeLabel": d.get("sizeLabel", "")})
+    it.photos = photos
+    db.session.commit()
+    v = Vehicle.query.get(it.vehicle_id)
+    return jsonify(it.to_dict(v.mileage if v else 0))
+
+
+@api.delete("/maintenance/<mid>/photos/<int:index>")
+@require_auth
+def remove_maintenance_photo(mid, index):
+    it = MaintenanceItem.query.filter_by(id=mid, user_id=g.user_id).first_or_404()
+    photos = list(it.photos or [])
+    if 0 <= index < len(photos):
+        photos.pop(index)
+    it.photos = photos
+    db.session.commit()
+    v = Vehicle.query.get(it.vehicle_id)
+    return jsonify(it.to_dict(v.mileage if v else 0))
+
+
+@api.post("/maintenance/<mid>/done")
+@require_auth
+def mark_maintenance_done(mid):
+    it = MaintenanceItem.query.filter_by(id=mid, user_id=g.user_id).first_or_404()
+    v = Vehicle.query.filter_by(id=it.vehicle_id, user_id=g.user_id).first_or_404()
+
+    log = LogEntry(
+        user_id=g.user_id, vehicle_id=v.id, title=it.title, emoji=it.emoji,
+        date=date.today(), mileage=v.mileage, place=it.workshop or "—",
+        cost=0, photos=[p.get("uri") for p in (it.photos or [])],
+    )
+    db.session.add(log)
+
+    # reinicia el ciclo: "hecho hoy" a este kilometraje/fecha
+    if it.interval_km:
+        it.last_done_km = v.mileage
+    if it.interval_days:
+        it.last_done_date = date.today()
+    it.photos = []
+    db.session.commit()
+    return jsonify(it.to_dict(v.mileage)), 200
 
 
 @api.post("/maintenance")
