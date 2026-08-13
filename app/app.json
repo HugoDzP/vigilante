@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Vigilante",
+    "slug": "vigilante",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "vigilante",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#050B14",
+    "splash": { "backgroundColor": "#050B14" },
+    "ios": { "supportsTablet": false, "bundleIdentifier": "eu.hugo.vigilante" },
+    "android": { "package": "eu.hugo.vigilante", "adaptiveIcon": { "backgroundColor": "#050B14" } },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      ["expo-image-picker", { "photosPermission": "Vigilante usa tus fotos para documentar mantenimientos." }],
+      ["expo-notifications", {}]
+    ],
+    "experiments": { "typedRoutes": true }
+  }
+}
