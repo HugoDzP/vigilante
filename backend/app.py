@@ -1,4 +1,7 @@
 # app.py — factory de la aplicación
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # asegura que config.py, models.py, etc. se encuentren siempre
+
 from flask import Flask, jsonify
 from flask_cors import CORS
 from config import DATABASE_URL
