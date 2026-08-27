@@ -6,10 +6,19 @@
     "orientation": "portrait",
     "scheme": "vigilante",
     "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
     "backgroundColor": "#050B14",
-    "splash": { "backgroundColor": "#050B14" },
+    "splash": { "image": "./assets/splash-icon.png", "backgroundColor": "#050B14", "resizeMode": "contain" },
     "ios": { "supportsTablet": false, "bundleIdentifier": "eu.hugo.vigilante" },
-    "android": { "package": "eu.hugo.vigilante", "adaptiveIcon": { "backgroundColor": "#050B14" } },
+    "android": {
+      "package": "eu.hugo.vigilante",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
     "plugins": [
       "expo-router",
       "expo-secure-store",

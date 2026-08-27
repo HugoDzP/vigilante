@@ -4,6 +4,7 @@ import { View, Text, ScrollView, Pressable, Switch, Alert, TextInput } from 'rea
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInUp } from 'react-native-reanimated';
+import { router } from 'expo-router';
 import Constants from 'expo-constants';
 import { T } from '../../src/theme';
 import { useVigilante } from '../../src/store';
@@ -142,6 +143,21 @@ export default function Settings() {
               </Pressable>
             } />
         </Card>
+
+        <SectionLabel>Beta</SectionLabel>
+        <Pressable onPress={() => router.push('/feedback')}>
+          <Card style={{ padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: T.mintDim,
+              alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontSize: 17 }}>💬</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: T.ink, fontSize: 14, fontWeight: '700' }}>Enviar feedback</Text>
+              <Text style={{ color: T.steel, fontSize: 11.5, marginTop: 1 }}>Fallos, ideas o cualquier comentario</Text>
+            </View>
+            <Text style={{ color: T.steelDim, fontSize: 15 }}>›</Text>
+          </Card>
+        </Pressable>
 
         <SectionLabel>Acerca de</SectionLabel>
         <Card style={{ padding: 16, gap: 12 }}>

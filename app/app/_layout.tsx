@@ -55,6 +55,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="maintenance/[id]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="vehicle/form" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="feedback" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         </Stack>
       </Ctx.Provider>
     </GestureHandlerRootView>

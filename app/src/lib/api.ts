@@ -100,4 +100,7 @@ export const sync = {
   removeMaintenancePhoto: (id: string, index: number) =>
     req(`/api/maintenance/${id}/photos/${index}`, { method: 'DELETE' }),
   maintenanceDone: (id: string) => req(`/api/maintenance/${id}/done`, { method: 'POST' }),
+
+  sendFeedback: (payload: { category: string; message: string; appVersion?: string; platform?: string }) =>
+    req('/api/feedback', { method: 'POST', body: JSON.stringify(payload) }),
 };
