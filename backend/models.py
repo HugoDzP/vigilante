@@ -218,3 +218,22 @@ def default_maintenance_for(vehicle: "Vehicle") -> list[MaintenanceItem]:
         cta_label="Marcar como hecho hoy",
     ))
     return items
+
+
+class Feedback(db.Model):
+    """Comentarios de los testers durante la beta: bugs, ideas o comentarios sueltos."""
+    __tablename__ = "feedback"
+    id = db.Column(db.String(32), primary_key=True, default=uid)
+    user_id = db.Column(db.String(36), index=True, nullable=False)
+    category = db.Column(db.String(20), default="other")  # "bug" | "idea" | "other"
+    message = db.Column(db.Text, nullable=False)
+    app_version = db.Column(db.String(20), nullable=True)
+    platform = db.Column(db.String(20), nullable=True)  # "ios" | "android"
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id, "category": self.category, "message": self.message,
+            "appVersion": self.app_version, "platform": self.platform,
+            "createdAt": self.created_at.isoformat(),
+        }

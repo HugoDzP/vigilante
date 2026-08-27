@@ -3,7 +3,7 @@ import re
 from datetime import date, datetime
 from flask import Blueprint, request, jsonify, g
 from auth import require_auth
-from models import db, Vehicle, LogEntry, Workshop, MileageLog, MaintenanceItem, default_maintenance_for
+from models import db, Vehicle, LogEntry, Workshop, MileageLog, MaintenanceItem, default_maintenance_for, Feedback
 from ocr import parse_invoice_image
 from chat_parse import parse_maintenance_text
 from places import search_workshops
@@ -312,3 +312,24 @@ def delete_workshop(wid):
     db.session.delete(w)
     db.session.commit()
     return jsonify(ok=True)
+
+
+# ---------------- Feedback de testers ----------------
+
+@api.post("/feedback")
+@require_auth
+def send_feedback():
+    d = request.get_json(force=True)
+    message = (d.get("message") or "").strip()
+    if not message:
+        return jsonify(error="El mensaje no puede estar vacío"), 400
+    fb = Feedback(
+        user_id=g.user_id,
+        category=d.get("category", "other"),
+        message=message,
+        app_version=d.get("appVersion"),
+        platform=d.get("platform"),
+    )
+    db.session.add(fb)
+    db.session.commit()
+    return jsonify(fb.to_dict()), 201
