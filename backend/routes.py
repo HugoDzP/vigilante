@@ -5,6 +5,7 @@ from flask import Blueprint, request, jsonify, g
 from auth import require_auth
 from models import db, Vehicle, LogEntry, Workshop, MileageLog, MaintenanceItem, default_maintenance_for
 from ocr import parse_invoice_image
+from chat_parse import parse_maintenance_text
 from places import search_workshops
 from config import GEMINI_API_KEY, GOOGLE_PLACES_KEY
 
@@ -198,6 +199,9 @@ def _monthly_km(vid: str) -> int:
 
 
 # ---------------- Parsing del chat ----------------
+# Con GEMINI_API_KEY configurada, entiende frases libres de verdad (vía Gemini).
+# Sin ella, o si Gemini falla por lo que sea, cae en un diccionario de palabras
+# clave — más simple, pero nunca deja al chat sin responder.
 
 DICT = [
     (r"aceite|filtro de aceite", "Aceite y filtro", "+15.000 km"),
@@ -215,23 +219,33 @@ DICT = [
 ]
 
 
-@api.post("/parse-text")
-@require_auth
-def parse_text():
-    d = request.get_json(force=True)
-    text = (d.get("text") or "").lower()
-    mileage = int(d.get("mileage") or 0)
-
-    cost = re.search(r"(\d+(?:[.,]\d+)?)\s*€", text)
-    km = re.search(r"(\d{1,3}(?:[.\s]\d{3})+|\d{4,6})\s*km", text)
-    hit = next(((t, n) for p, t, n in DICT if re.search(p, text)), None)
-
-    return jsonify({
+def parse_text_fallback(text: str, mileage: int) -> dict:
+    t = text.lower()
+    cost = re.search(r"(\d+(?:[.,]\d+)?)\s*€", t)
+    km = re.search(r"(\d{1,3}(?:[.\s]\d{3})+|\d{4,6})\s*km", t)
+    hit = next(((title, nxt) for p, title, nxt in DICT if re.search(p, t)), None)
+    return {
         "title": hit[0] if hit else "Mantenimiento registrado",
         "next": hit[1] if hit else "—",
         "cost": f"{cost.group(1)} €" if cost else "— añadir",
         "km": km.group(1) if km else f"{mileage:,}".replace(",", "."),
-    })
+    }
+
+
+@api.post("/parse-text")
+@require_auth
+def parse_text():
+    d = request.get_json(force=True)
+    text = d.get("text") or ""
+    mileage = int(d.get("mileage") or 0)
+
+    if GEMINI_API_KEY:
+        try:
+            return jsonify(parse_maintenance_text(text, mileage))
+        except Exception as e:
+            print(f"Gemini falló en /parse-text, uso el diccionario de respaldo: {e}")
+
+    return jsonify(parse_text_fallback(text, mileage))
 
 
 # ---------------- OCR de facturas ----------------
