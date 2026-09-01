@@ -287,8 +287,21 @@ export const useVigilante = create<S>((set, get) => ({
     }
   },
 
-  addWorkshop: w => set(s => ({ workshops: [...s.workshops, { ...w, id: `w${Date.now()}` }] })),
-  removeWorkshop: id => set(s => ({ workshops: s.workshops.filter(w => w.id !== id) })),
+  addWorkshop: w => {
+    const tempId = `w${Date.now()}`;
+    set(s => ({ workshops: [...s.workshops, { ...w, id: tempId }] }));
+    if (HAS_BACKEND) {
+      sync.createWorkshop(w)
+        .then((res: any) => {
+          if (res?.id) set(s => ({ workshops: s.workshops.map(x => (x.id === tempId ? { ...x, id: res.id } : x)) }));
+        })
+        .catch(e => console.warn('No se pudo guardar el taller en el backend:', e));
+    }
+  },
+  removeWorkshop: id => {
+    set(s => ({ workshops: s.workshops.filter(w => w.id !== id) }));
+    if (HAS_BACKEND) sync.deleteWorkshop(id).catch(e => console.warn('No se pudo borrar el taller en el backend:', e));
+  },
 
   // ---------- Sincronización con el backend ----------
   hydrateFromBackend: async () => {
@@ -303,8 +316,13 @@ export const useVigilante = create<S>((set, get) => ({
         health: 0.9, monthlyKm: 0, label: v.label, photoUri: v.photoUri,
         summary: 'Registra tu primer mantenimiento desde el Chat y empiezo a vigilarlo. 🛡️',
       }));
+
+      let workshops: Workshop[] = [];
+      try { workshops = await sync.workshops() as Workshop[]; }
+      catch (e) { console.warn('No se pudieron cargar los talleres del backend:', e); }
+
       set({
-        vehicles,
+        vehicles, workshops,
         currentVehicleId: vehicles[0]?.id ?? '',
         maintenance: [], history: [], historyLoaded: {}, maintenanceLoaded: {},
         hydrated: true,

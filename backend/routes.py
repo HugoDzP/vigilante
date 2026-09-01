@@ -287,13 +287,14 @@ def parse_invoice():
 @require_auth
 def places_search():
     if not GOOGLE_PLACES_KEY:
-        return jsonify([])
+        return jsonify(error="not_configured"), 501
     q = request.args.get("q", "").strip()
     if len(q) < 3:
         return jsonify([])
     try:
         return jsonify(search_workshops(q))
     except Exception as e:
+        print(f"Places falló para q={q!r}: {e}")  # visible en los logs de Render
         return jsonify(error=f"Places falló: {e}"), 502
 
 

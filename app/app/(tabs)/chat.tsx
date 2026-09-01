@@ -1,6 +1,6 @@
 // app/(tabs)/chat.tsx — registro conversacional + OCR de facturas
-import React, { useRef, useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList, Image, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useRef, useState, useEffect } from 'react';
+import { View, Text, TextInput, Pressable, FlatList, Image, KeyboardAvoidingView, Keyboard, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInUp } from 'react-native-reanimated';
@@ -23,6 +23,15 @@ export default function Chat() {
   const store = useVigilante();
   const car = store.currentVehicle();
   const list = useRef<FlatList>(null);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardVisible(false));
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
   const [draft, setDraft] = useState('');
   const [msgs, setMsgs] = useState<Msg[]>([
     { id: mid(), kind: 'text', isUser: false,
@@ -188,7 +197,8 @@ export default function Chat() {
             cuando el teclado está cerrado; con el teclado abierto, ese hueco extra
             es un precio pequeño y aceptable frente a tapar el campo por completo. */}
         <View style={{ flexDirection: 'row', gap: 9, alignItems: 'center',
-          paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10, marginBottom: 96 }}>
+          paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10,
+          marginBottom: keyboardVisible ? 10 : 96 }}>
           <Pressable onPress={attachInvoice}
             style={{ width: 48, height: 48, borderRadius: 24, borderWidth: 1, borderColor: T.stroke,
               backgroundColor: 'rgba(13,21,37,0.88)', alignItems: 'center', justifyContent: 'center' }}>

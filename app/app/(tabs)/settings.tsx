@@ -21,6 +21,7 @@ export default function Settings() {
   const [adding, setAdding] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PlaceResult[]>([]);
+  const [placesError, setPlacesError] = useState<'not_configured' | 'other' | null>(null);
   const [manual, setManual] = useState({ name: '', address: '', phone: '' });
   const [deleting, setDeleting] = useState(false);
 
@@ -64,8 +65,14 @@ export default function Settings() {
 
   const search = async (q: string) => {
     setQuery(q);
+    setPlacesError(null);
     if (q.length < 3 || !HAS_BACKEND || demo) { setResults([]); return; }
-    try { setResults(await searchPlaces(q)); } catch { setResults([]); }
+    try {
+      setResults(await searchPlaces(q));
+    } catch (e: any) {
+      setResults([]);
+      setPlacesError(e?.message === 'not_configured' ? 'not_configured' : 'other');
+    }
   };
 
   const addFromPlace = (p: PlaceResult) => {
@@ -77,7 +84,7 @@ export default function Settings() {
     store.addWorkshop({ ...manual, name: manual.name.trim(), notes: 'Añadido a mano' });
     resetAdd();
   };
-  const resetAdd = () => { setAdding(false); setQuery(''); setResults([]); setManual({ name: '', address: '', phone: '' }); };
+  const resetAdd = () => { setAdding(false); setQuery(''); setResults([]); setPlacesError(null); setManual({ name: '', address: '', phone: '' }); };
 
   return (
     <LinearGradient colors={[T.bg1, T.bg0]} style={{ flex: 1 }}>
@@ -123,7 +130,7 @@ export default function Settings() {
           </Pressable>
         ) : (
           <Card style={{ padding: 14, gap: 10 }}>
-            {HAS_BACKEND && !demo ? (
+            {HAS_BACKEND && !demo && placesError !== 'not_configured' ? (
               <>
                 <Field value={query} onChangeText={search} placeholder="Busca en Google Maps: «taller Toledo»…" />
                 {results.map(p => (
@@ -133,14 +140,19 @@ export default function Settings() {
                     <Text style={{ color: T.steel, fontSize: 11.5 }}>{p.address}</Text>
                   </Pressable>
                 ))}
-                {query.length >= 3 && results.length === 0 && (
+                {query.length >= 3 && results.length === 0 && !placesError && (
                   <Text style={{ color: T.steelDim, fontSize: 11.5 }}>Sin resultados…</Text>
+                )}
+                {placesError === 'other' && (
+                  <Text style={{ color: T.steelDim, fontSize: 11.5 }}>No se pudo buscar ahora mismo. Inténtalo de nuevo.</Text>
                 )}
               </>
             ) : (
               <>
                 <Text style={{ color: T.steelDim, fontSize: 11.5, lineHeight: 17 }}>
-                  {demo
+                  {placesError === 'not_configured'
+                    ? 'La búsqueda en Google Maps aún no está activada en el servidor. De momento, añádelo a mano:'
+                    : demo
                     ? 'La búsqueda en Google Maps necesita una cuenta real. De momento, añádelo a mano:'
                     : 'La búsqueda en Google Maps se activa al conectar el backend. De momento, añádelo a mano:'}
                 </Text>

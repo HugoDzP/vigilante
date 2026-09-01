@@ -87,7 +87,14 @@ export interface PlaceResult {
 
 export async function searchPlaces(query: string): Promise<PlaceResult[]> {
   if (!HAS_BACKEND) return []; // sin backend: alta manual de talleres
-  return req<PlaceResult[]>(`/api/places/search?q=${encodeURIComponent(query)}`);
+  try {
+    return await req<PlaceResult[]>(`/api/places/search?q=${encodeURIComponent(query)}`);
+  } catch (e: any) {
+    if (String(e?.message ?? '').includes('501')) {
+      throw new Error('not_configured'); // GOOGLE_PLACES_KEY no puesta en el backend
+    }
+    throw e;
+  }
 }
 
 // ---------- Sincronización (cuando exista el backend) ----------
@@ -95,6 +102,10 @@ export const sync = {
   vehicles: () => req('/api/vehicles'),
   createVehicle: (v: unknown) => req('/api/vehicles', { method: 'POST', body: JSON.stringify(v) }),
   updateVehicle: (id: string, v: unknown) => req(`/api/vehicles/${id}`, { method: 'PUT', body: JSON.stringify(v) }),
+
+  workshops: () => req('/api/workshops'),
+  createWorkshop: (w: unknown) => req('/api/workshops', { method: 'POST', body: JSON.stringify(w) }),
+  deleteWorkshop: (id: string) => req(`/api/workshops/${id}`, { method: 'DELETE' }),
   history: (vehicleId: string) => req(`/api/vehicles/${vehicleId}/history`),
   pushLog: (log: unknown) => req('/api/maintenance', { method: 'POST', body: JSON.stringify(log) }),
   pushMileage: (vehicleId: string, km: number) =>

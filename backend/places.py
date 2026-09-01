@@ -27,7 +27,15 @@ def search_workshops(query: str, limit: int = 5) -> list[dict]:
         },
         timeout=8,
     )
-    resp.raise_for_status()
+    if not resp.ok:
+        # Propaga el motivo REAL que da Google (clave mal restringida, API no
+        # habilitada, falta facturación...) en vez de un genérico "400/403".
+        try:
+            detail = resp.json().get("error", {}).get("message", resp.text)
+        except Exception:
+            detail = resp.text
+        raise RuntimeError(f"Google Places {resp.status_code}: {detail}")
+
     out = []
     for p in resp.json().get("places", []):
         loc = p.get("location", {})
