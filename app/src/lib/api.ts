@@ -111,4 +111,6 @@ export const sync = {
 
   sendFeedback: (payload: { category: string; message: string; appVersion?: string; platform?: string }) =>
     req('/api/feedback', { method: 'POST', body: JSON.stringify(payload) }),
+
+  deleteAccount: () => req('/api/account', { method: 'DELETE' }),
 };

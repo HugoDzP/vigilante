@@ -168,9 +168,13 @@ export default function Chat() {
 
   return (
     <LinearGradient colors={[T.bg1, T.bg0]} style={{ flex: 1 }}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
+        style={{ flex: 1 }}
+      >
         <FlatList ref={list} data={msgs} keyExtractor={m => m.id} renderItem={render}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 64, paddingBottom: 170, gap: 12 }}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 64, paddingBottom: 20, gap: 12 }}
           ListHeaderComponent={
             <View style={{ marginBottom: 6 }}>
               <Eyebrow>Texto, voz o foto de factura</Eyebrow>
@@ -179,8 +183,12 @@ export default function Chat() {
           }
           showsVerticalScrollIndicator={false} />
 
-        <View style={{ position: 'absolute', left: 14, right: 14, bottom: 96,
-          flexDirection: 'row', gap: 9, alignItems: 'center' }}>
+        {/* Barra de entrada: elemento normal del flujo (no absoluto), así el teclado
+            la empuja de verdad. El marginBottom la separa de la tab bar flotante
+            cuando el teclado está cerrado; con el teclado abierto, ese hueco extra
+            es un precio pequeño y aceptable frente a tapar el campo por completo. */}
+        <View style={{ flexDirection: 'row', gap: 9, alignItems: 'center',
+          paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10, marginBottom: 96 }}>
           <Pressable onPress={attachInvoice}
             style={{ width: 48, height: 48, borderRadius: 24, borderWidth: 1, borderColor: T.stroke,
               backgroundColor: 'rgba(13,21,37,0.88)', alignItems: 'center', justifyContent: 'center' }}>

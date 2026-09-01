@@ -44,7 +44,7 @@ export async function sendDemoNotification() {
   return Notifications.scheduleNotificationAsync({
     content: {
       title: '🛡️ Vigilante',
-      body: '🛢️ Aceite y filtro en 500 km. Pide cita en Taller Premier antes del finde.',
+      body: '🛢️ Aceite y filtro en 500 km. Pide cita en Taller Rodamotor antes del finde.',
     },
     trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 3 },
   });

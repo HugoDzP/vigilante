@@ -7,7 +7,8 @@ from models import db, Vehicle, LogEntry, Workshop, MileageLog, MaintenanceItem,
 from ocr import parse_invoice_image
 from chat_parse import parse_maintenance_text
 from places import search_workshops
-from config import GEMINI_API_KEY, GOOGLE_PLACES_KEY
+from config import GEMINI_API_KEY, GOOGLE_PLACES_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+import requests
 
 api = Blueprint("api", __name__, url_prefix="/api")
 
@@ -345,3 +346,36 @@ def send_feedback():
     db.session.add(fb)
     db.session.commit()
     return jsonify(fb.to_dict()), 201
+
+
+# ---------------- Borrado de cuenta (obligatorio por política de Google Play) ----------------
+
+@api.delete("/account")
+@require_auth
+def delete_account():
+    uid_ = g.user_id
+
+    # 1) borra todos los datos del usuario en nuestra base de datos
+    Feedback.query.filter_by(user_id=uid_).delete()
+    MileageLog.query.filter_by(user_id=uid_).delete()
+    MaintenanceItem.query.filter_by(user_id=uid_).delete()
+    LogEntry.query.filter_by(user_id=uid_).delete()
+    Workshop.query.filter_by(user_id=uid_).delete()
+    Vehicle.query.filter_by(user_id=uid_).delete()
+    db.session.commit()
+
+    # 2) borra la cuenta de Supabase Auth en sí (requiere la service_role key)
+    if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
+        try:
+            requests.delete(
+                f"{SUPABASE_URL}/auth/v1/admin/users/{uid_}",
+                headers={
+                    "apikey": SUPABASE_SERVICE_ROLE_KEY,
+                    "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+                },
+                timeout=10,
+            )
+        except Exception as e:
+            print(f"No se pudo borrar el usuario de Supabase Auth (datos ya borrados): {e}")
+
+    return jsonify(ok=True)

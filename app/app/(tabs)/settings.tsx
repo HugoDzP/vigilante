@@ -9,7 +9,7 @@ import Constants from 'expo-constants';
 import { T } from '../../src/theme';
 import { useVigilante } from '../../src/store';
 import { requestNotifPermission, sendDemoNotification, scheduleMileageAsk } from '../../src/lib/notifications';
-import { searchPlaces, HAS_BACKEND, type PlaceResult } from '../../src/lib/api';
+import { searchPlaces, HAS_BACKEND, sync, type PlaceResult } from '../../src/lib/api';
 import { DEMO_MODE } from '../../src/lib/supabase';
 import { Card, Eyebrow, ScreenTitle, Field } from '../../src/components';
 import { useAuth } from '../_layout';
@@ -22,6 +22,34 @@ export default function Settings() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PlaceResult[]>([]);
   const [manual, setManual] = useState({ name: '', address: '', phone: '' });
+  const [deleting, setDeleting] = useState(false);
+
+  const confirmDeleteAccount = () => {
+    Alert.alert(
+      '¿Eliminar tu cuenta?',
+      'Se borrarán tus vehículos, mantenimientos, fotos e historial de forma permanente. Esta acción no se puede deshacer.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Eliminar', style: 'destructive', onPress: doDeleteAccount },
+      ],
+    );
+  };
+
+  const doDeleteAccount = async () => {
+    if (demo || !HAS_BACKEND) {
+      signOut();
+      return;
+    }
+    setDeleting(true);
+    try {
+      await sync.deleteAccount();
+      signOut();
+    } catch (e) {
+      Alert.alert('No se pudo eliminar', 'Inténtalo de nuevo en un momento, o escríbenos desde Feedback.');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const toggleNotif = async (v: boolean) => {
     if (v) {
@@ -36,7 +64,7 @@ export default function Settings() {
 
   const search = async (q: string) => {
     setQuery(q);
-    if (q.length < 3 || !HAS_BACKEND) { setResults([]); return; }
+    if (q.length < 3 || !HAS_BACKEND || demo) { setResults([]); return; }
     try { setResults(await searchPlaces(q)); } catch { setResults([]); }
   };
 
@@ -95,9 +123,9 @@ export default function Settings() {
           </Pressable>
         ) : (
           <Card style={{ padding: 14, gap: 10 }}>
-            {HAS_BACKEND ? (
+            {HAS_BACKEND && !demo ? (
               <>
-                <Field value={query} onChangeText={search} placeholder="Busca en Google Maps: «Norauto Madrid»…" />
+                <Field value={query} onChangeText={search} placeholder="Busca en Google Maps: «taller Toledo»…" />
                 {results.map(p => (
                   <Pressable key={p.placeId} onPress={() => addFromPlace(p)}
                     style={{ paddingVertical: 9, borderBottomWidth: 1, borderColor: T.stroke }}>
@@ -112,7 +140,9 @@ export default function Settings() {
             ) : (
               <>
                 <Text style={{ color: T.steelDim, fontSize: 11.5, lineHeight: 17 }}>
-                  La búsqueda en Google Maps se activa al conectar el backend. De momento, añádelo a mano:
+                  {demo
+                    ? 'La búsqueda en Google Maps necesita una cuenta real. De momento, añádelo a mano:'
+                    : 'La búsqueda en Google Maps se activa al conectar el backend. De momento, añádelo a mano:'}
                 </Text>
                 <Field value={manual.name} onChangeText={t => setManual(s => ({ ...s, name: t }))} placeholder="Nombre del taller" />
                 <Field value={manual.address} onChangeText={t => setManual(s => ({ ...s, address: t }))} placeholder="Dirección" />
@@ -143,6 +173,13 @@ export default function Settings() {
               </Pressable>
             } />
         </Card>
+        <Pressable onPress={confirmDeleteAccount} disabled={deleting} style={{ marginTop: 10 }}>
+          <Card style={{ padding: 14, alignItems: 'center' }}>
+            <Text style={{ color: T.danger, fontSize: 12.5, fontWeight: '700' }}>
+              {deleting ? 'Eliminando…' : 'Eliminar mi cuenta y todos mis datos'}
+            </Text>
+          </Card>
+        </Pressable>
 
         <SectionLabel>Beta</SectionLabel>
         <Pressable onPress={() => router.push('/feedback')}>
@@ -164,7 +201,7 @@ export default function Settings() {
           <AboutRow label="App" value={Constants.expoConfig?.name ?? 'Vigilante'} />
           <AboutRow label="Versión" value={Constants.expoConfig?.version ?? '1.0.0'} />
           <AboutRow label="Fecha de versión" value="Agosto 2026" />
-          <AboutRow label="Licencia" value="Software privado · todos los derechos reservados" />
+          <AboutRow label="Licencia" value="Privada" />
         </Card>
       </ScrollView>
     </LinearGradient>
@@ -173,9 +210,9 @@ export default function Settings() {
 
 function AboutRow({ label, value }: { label: string; value: string }) {
   return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-      <Text style={{ color: T.steel, fontSize: 12.5 }}>{label}</Text>
-      <Text style={{ color: T.ink, fontSize: 12.5, fontWeight: '600' }}>{value}</Text>
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+      <Text style={{ color: T.steel, fontSize: 12.5, flexShrink: 0 }}>{label}</Text>
+      <Text style={{ color: T.ink, fontSize: 12.5, fontWeight: '600', flexShrink: 1, textAlign: 'right' }}>{value}</Text>
     </View>
   );
 }

@@ -99,7 +99,7 @@ function demoSeed() {
       {
         id: 'brakes', vehicleId: 'merc', emoji: '⚠️', title: 'Pastillas de freno',
         detail: 'Delanteras · taller recomendado', remainingText: '480 km',
-        progress: 0.92, level: 'urgent' as Level, workshop: 'Taller Premier',
+        progress: 0.92, level: 'urgent' as Level, workshop: 'Taller Rodamotor',
         stats: [['480 km', 'Restantes'], ['~135 €', 'Coste estimado'], ['52.000 km', 'Última vez'], ['Delanteras', 'Posición']] as [string, string][],
         notes: 'Vibración leve al frenar fuerte. Cambiar pastillas y revisar discos en el mismo taller.',
         photos: [],
@@ -112,7 +112,7 @@ function demoSeed() {
       {
         id: 'oil', vehicleId: 'merc', emoji: '🛢️', title: 'Aceite y filtro',
         detail: '5W-30 Long Life · cada 15.000 km', remainingText: '1.550 km',
-        progress: 0.68, level: 'soon' as Level, workshop: 'Taller Premier',
+        progress: 0.68, level: 'soon' as Level, workshop: 'Taller Rodamotor',
         stats: [['1.550 km', 'Restantes'], ['89 €', 'Último coste'], ['130.000 km', 'Próximo a'], ['15.000 km', 'Intervalo']] as [string, string][],
         notes: 'Aceite 5W-30 Long Life (norma MB 229.52). Filtro Mann HU 6004x. Guarda el ticket en fotos.',
         photos: [],
@@ -142,14 +142,14 @@ function demoSeed() {
       },
     ] as MaintenanceItem[],
     history: [
-      { id: 'h1', vehicleId: 'merc', emoji: '🛢️', title: 'Aceite y filtro', dateLabel: '11 jun', monthKey: 'Junio 2026', mileage: 128_450, place: 'Taller Premier', cost: 89, photos: [], maintenanceId: 'oil' },
-      { id: 'h2', vehicleId: 'merc', emoji: '🛞', title: 'Rotación de neumáticos', dateLabel: '2 jun', monthKey: 'Junio 2026', mileage: 127_900, place: 'DIY en Consuegra', cost: 0, photos: [] },
+      { id: 'h1', vehicleId: 'merc', emoji: '🛢️', title: 'Aceite y filtro', dateLabel: '11 jun', monthKey: 'Junio 2026', mileage: 128_450, place: 'Taller Rodamotor', cost: 89, photos: [], maintenanceId: 'oil' },
+      { id: 'h2', vehicleId: 'merc', emoji: '🛞', title: 'Rotación de neumáticos', dateLabel: '2 jun', monthKey: 'Junio 2026', mileage: 127_900, place: 'DIY en Villamora', cost: 0, photos: [] },
       { id: 'h3', vehicleId: 'merc', emoji: '🌬️', title: 'Filtro de habitáculo', dateLabel: '14 abr', monthKey: 'Abril 2026', mileage: 125_300, place: 'DIY', cost: 24, photos: [] },
-      { id: 'h4', vehicleId: 'merc', emoji: '🔋', title: 'Batería 12V', dateLabel: '3 abr', monthKey: 'Abril 2026', mileage: 124_880, place: 'Norauto Madrid Río', cost: 139, photos: [] },
+      { id: 'h4', vehicleId: 'merc', emoji: '🔋', title: 'Batería 12V', dateLabel: '3 abr', monthKey: 'Abril 2026', mileage: 124_880, place: 'AutoStop Rivera', cost: 139, photos: [] },
     ] as LogEntry[],
     workshops: [
-      { id: 'w1', name: 'Taller Premier', address: 'Pol. Ind. Consuegra', phone: '925 48 XX XX', notes: 'El de confianza · pregunta por Andrés' },
-      { id: 'w2', name: 'Norauto Madrid Río', address: 'C.C. Madrid Río', phone: '91 552 XX XX', notes: 'Baterías y neumáticos' },
+      { id: 'w1', name: 'Taller Rodamotor', address: 'Pol. Ind. Villamora', phone: '925 48 XX XX', notes: 'El de confianza · pregunta por Andrés' },
+      { id: 'w2', name: 'AutoStop Rivera', address: 'C.C. Vialta', phone: '91 552 XX XX', notes: 'Baterías y neumáticos' },
     ] as Workshop[],
   };
 }
