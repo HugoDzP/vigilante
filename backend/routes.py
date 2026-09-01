@@ -294,7 +294,7 @@ def places_search():
     try:
         return jsonify(search_workshops(q))
     except Exception as e:
-        print(f"Places falló para q={q!r}: {e}")  # visible en los logs de Render
+        print(f"Places falló para q={q!r}: {e}", flush=True)  # flush=True: que salga YA en los logs de Render
         return jsonify(error=f"Places falló: {e}"), 502
 
 

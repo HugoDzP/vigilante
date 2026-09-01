@@ -167,11 +167,11 @@ export const useVigilante = create<S>((set, get) => ({
     return vehicles.find(v => v.id === currentVehicleId) ?? vehicles[0];
   },
   maintenanceFor: id => {
-    get().loadMaintenanceFor(id);
+    if (get().vehicles.some(v => v.id === id)) get().loadMaintenanceFor(id);
     return get().maintenance.filter(m => m.vehicleId === id);
   },
   historyFor: id => {
-    get().loadHistoryFor(id); // dispara la carga en segundo plano si hace falta (no bloquea)
+    if (get().vehicles.some(v => v.id === id)) get().loadHistoryFor(id);
     return get().history.filter(h => h.vehicleId === id);
   },
 
