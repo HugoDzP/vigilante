@@ -19,13 +19,20 @@ async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 // ---------- Parsing de texto (chat) ----------
-export interface ParsedMaintenance {
-  title: string; cost: string; km: string; next: string;
-}
+export type ParsedMaintenance =
+  | { isMaintenance: true; title: string; cost: string; km: string; next: string }
+  | { isMaintenance: false; reply: string };
+
+const GREETINGS = /^\s*(hola|hey|holi|buenas|hi|qu[eé] tal|gracias|vale|ok|okay|adi[oó]s|buenos d[ií]as|buenas tardes|buenas noches)[\s!.,¡¿?]*$/i;
 
 /** Parser local por diccionario: fallback cuando no hay backend */
 export function parseTextLocal(text: string, mileage: number): ParsedMaintenance {
   const t = text.toLowerCase();
+
+  if (GREETINGS.test(t)) {
+    return { isMaintenance: false, reply: '¡Hola! Cuéntame qué le has hecho al coche y lo apunto 🙂' };
+  }
+
   const cost = t.match(/(\d+(?:[.,]\d+)?)\s*€/)?.[1] ?? null;
   const km = t.match(/(\d{1,3}(?:[.\s]\d{3})+|\d{4,6})\s*km/)?.[1] ?? null;
   const dict: [RegExp, string, string][] = [
@@ -40,6 +47,7 @@ export function parseTextLocal(text: string, mileage: number): ParsedMaintenance
   ];
   const hit = dict.find(([re]) => re.test(t));
   return {
+    isMaintenance: true,
     title: hit?.[1] ?? 'Mantenimiento registrado',
     next: hit?.[2] ?? '—',
     cost: cost ? `${cost} €` : '— añadir',

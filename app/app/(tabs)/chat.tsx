@@ -50,6 +50,13 @@ export default function Chat() {
     scrollEnd();
 
     const p = await parseText(text, car.mileage);
+
+    if (!p.isMaintenance) {
+      replaceTyping([{ id: mid(), kind: 'text', isUser: false, text: p.reply }]);
+      scrollEnd();
+      return;
+    }
+
     const today = new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
     replaceTyping([
       { id: mid(), kind: 'confirm', title: p.title,

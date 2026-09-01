@@ -219,12 +219,24 @@ DICT = [
 ]
 
 
+GREETINGS = re.compile(
+    r"^\s*(hola|hey|holi|buenas|hi|qu[eé] tal|gracias|vale|ok|okay|adi[oó]s"
+    r"|buenos d[ií]as|buenas tardes|buenas noches)[\s!.,¡¿?]*$",
+    re.IGNORECASE,
+)
+
+
 def parse_text_fallback(text: str, mileage: int) -> dict:
     t = text.lower()
+
+    if GREETINGS.match(t):
+        return {"isMaintenance": False, "reply": "¡Hola! Cuéntame qué le has hecho al coche y lo apunto 🙂"}
+
     cost = re.search(r"(\d+(?:[.,]\d+)?)\s*€", t)
     km = re.search(r"(\d{1,3}(?:[.\s]\d{3})+|\d{4,6})\s*km", t)
     hit = next(((title, nxt) for p, title, nxt in DICT if re.search(p, t)), None)
     return {
+        "isMaintenance": True,
         "title": hit[0] if hit else "Mantenimiento registrado",
         "next": hit[1] if hit else "—",
         "cost": f"{cost.group(1)} €" if cost else "— añadir",
