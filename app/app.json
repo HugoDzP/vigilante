@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "eu.hugo.vigilante",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
