@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "eu.hugo.vigilante",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
@@ -41,7 +41,8 @@
       [
         "expo-notifications",
         {}
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
