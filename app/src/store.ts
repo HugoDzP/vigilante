@@ -45,6 +45,8 @@ interface S {
   updatePreferences: (p: { reminderLeadKm?: number; reminderLeadDays?: number }) => Promise<void>;
   refreshSummary: (vehicleId: string, force?: boolean) => Promise<void>;
   hydrated: boolean;                 // true una vez cargados datos reales del backend
+  hydrating: boolean;                 // true mientras se está cargando (para no mostrar "garaje vacío" de mentira)
+  hydrateFailed: boolean;              // true si tras varios intentos no se pudo cargar — para mostrar "Reintentar"
   historyLoaded: Record<string, boolean>;
   maintenanceLoaded: Record<string, boolean>;
 
@@ -180,6 +182,8 @@ export const useVigilante = create<S>((set, get) => ({
   reminderLeadKm: 1000,
   reminderLeadDays: 60,
   hydrated: false,
+  hydrating: false,
+  hydrateFailed: false,
   historyLoaded: {},
   maintenanceLoaded: {},
 
@@ -429,31 +433,43 @@ export const useVigilante = create<S>((set, get) => ({
   // ---------- Sincronización con el backend ----------
   hydrateFromBackend: async () => {
     if (!HAS_BACKEND) return; // sin backend: se queda con los datos demo
-    try {
-      const raw = await sync.vehicles() as any[];
-      const vehicles: Vehicle[] = raw.map(v => ({
-        id: v.id, name: `${v.brand} ${v.model}`.trim(), short: v.brand,
-        initial: (v.brand?.[0] ?? '?').toUpperCase(),
-        brand: v.brand, model: v.model, year: v.year, plate: v.plate,
-        fuel: v.fuel, hp: v.hp, bodyType: v.bodyType, mileage: v.mileage,
-        health: typeof v.health === 'number' ? v.health : 0.9, monthlyKm: 0, label: v.label, photoUri: v.photoUri,
-        summary: 'Registra tu primer mantenimiento desde el Chat y empiezo a vigilarlo. 🛡️',
-      }));
 
-      let workshops: Workshop[] = [];
-      try { workshops = await sync.workshops() as Workshop[]; }
-      catch (e) { console.warn('No se pudieron cargar los talleres del backend:', e); }
+    set({ hydrating: true, hydrateFailed: false });
+    const ATTEMPTS = 3;
+    const DELAYS_MS = [0, 1200, 2800]; // pequeña espera creciente entre intentos — cubre despertares lentos del servidor
 
-      set({
-        vehicles, workshops,
-        currentVehicleId: vehicles[0]?.id ?? '',
-        maintenance: [], history: [], historyLoaded: {}, maintenanceLoaded: {},
-        hydrated: true,
-      });
-      get().loadPreferences(); // en paralelo, no bloquea el arranque
-    } catch (e) {
-      console.warn('No se pudo cargar el garaje del backend:', e);
+    for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+      if (DELAYS_MS[attempt]) await new Promise(r => setTimeout(r, DELAYS_MS[attempt]));
+      try {
+        const raw = await sync.vehicles() as any[];
+        const vehicles: Vehicle[] = raw.map(v => ({
+          id: v.id, name: `${v.brand} ${v.model}`.trim(), short: v.brand,
+          initial: (v.brand?.[0] ?? '?').toUpperCase(),
+          brand: v.brand, model: v.model, year: v.year, plate: v.plate,
+          fuel: v.fuel, hp: v.hp, bodyType: v.bodyType, mileage: v.mileage,
+          health: typeof v.health === 'number' ? v.health : 0.9, monthlyKm: 0, label: v.label, photoUri: v.photoUri,
+          summary: 'Registra tu primer mantenimiento desde el Chat y empiezo a vigilarlo. 🛡️',
+        }));
+
+        let workshops: Workshop[] = [];
+        try { workshops = await sync.workshops() as Workshop[]; }
+        catch (e) { console.warn('No se pudieron cargar los talleres del backend:', e); }
+
+        set({
+          vehicles, workshops,
+          currentVehicleId: vehicles[0]?.id ?? '',
+          maintenance: [], history: [], historyLoaded: {}, maintenanceLoaded: {},
+          hydrated: true, hydrating: false, hydrateFailed: false,
+        });
+        get().loadPreferences(); // en paralelo, no bloquea el arranque
+        return; // éxito — no hace falta reintentar más
+      } catch (e) {
+        console.warn(`No se pudo cargar el garaje del backend (intento ${attempt + 1}/${ATTEMPTS}):`, e);
+      }
     }
+    // los 3 intentos fallaron de verdad — lo decimos claramente en vez de dejar
+    // al usuario mirando un garaje vacío sin explicación
+    set({ hydrating: false, hydrateFailed: true });
   },
 
   loadHistoryFor: async (vehicleId: string) => {
@@ -530,5 +546,5 @@ export const useVigilante = create<S>((set, get) => ({
     }));
   },
 
-  resetToDemo: () => set({ ...demoSeed(), currentVehicleId: 'merc', hydrated: false, historyLoaded: {}, maintenanceLoaded: {} }),
+  resetToDemo: () => set({ ...demoSeed(), currentVehicleId: 'merc', hydrated: false, hydrating: false, hydrateFailed: false, historyLoaded: {}, maintenanceLoaded: {} }),
 }));

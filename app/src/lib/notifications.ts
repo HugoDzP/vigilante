@@ -20,6 +20,14 @@ export async function requestNotifPermission(): Promise<boolean> {
   return status === 'granted';
 }
 
+/** Consulta el permiso REAL actual, sin volver a pedirlo — para que el
+ * interruptor de Ajustes muestre el estado de verdad al abrir la app, en vez
+ * de resetearse a "apagado" cada vez aunque el permiso siga concedido. */
+export async function checkNotifPermission(): Promise<boolean> {
+  const { status } = await Notifications.getPermissionsAsync();
+  return status === 'granted';
+}
+
 /** Recordatorio puntual: "Aceite y filtro en 500 km" */
 export async function scheduleMaintenanceReminder(title: string, body: string, inDays: number) {
   return Notifications.scheduleNotificationAsync({
@@ -50,13 +58,11 @@ export async function scheduleMileageAsk(carName: string) {
   });
 }
 
-/** Demo inmediata para que el usuario vea cómo se verá (Ajustes) */
-export async function sendDemoNotification() {
+/** Confirmación al activar notificaciones — nada de ejemplos con datos inventados,
+ * solo confirma que ha quedado activado. */
+export async function sendNotificationsEnabledConfirmation() {
   return Notifications.scheduleNotificationAsync({
-    content: {
-      title: '🛡️ Vigilante',
-      body: '🛢️ Aceite y filtro en 500 km. Pide cita en Taller Rodamotor antes del finde.',
-    },
-    trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 3 },
+    content: { title: '✅ Notificaciones activadas', body: 'Te avisaré cuando toque revisar algo.', sound: false },
+    trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 1 },
   });
 }

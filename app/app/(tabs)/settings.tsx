@@ -1,5 +1,5 @@
 // app/(tabs)/settings.tsx — notificaciones, talleres favoritos (Places) y cuenta
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, Pressable, Switch, Alert, TextInput } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,7 +8,7 @@ import { router } from 'expo-router';
 import Constants from 'expo-constants';
 import { T } from '../../src/theme';
 import { useVigilante } from '../../src/store';
-import { requestNotifPermission, sendDemoNotification, scheduleMileageAsk } from '../../src/lib/notifications';
+import { requestNotifPermission, checkNotifPermission, sendNotificationsEnabledConfirmation, scheduleMileageAsk } from '../../src/lib/notifications';
 import { searchPlaces, HAS_BACKEND, sync, type PlaceResult } from '../../src/lib/api';
 import { DEMO_MODE } from '../../src/lib/supabase';
 import { Card, Eyebrow, ScreenTitle, Field } from '../../src/components';
@@ -18,6 +18,7 @@ export default function Settings() {
   const store = useVigilante();
   const { signOut, demo } = useAuth();
   const [notifOn, setNotifOn] = useState(false);
+  useEffect(() => { checkNotifPermission().then(setNotifOn); }, []);
   const [adding, setAdding] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PlaceResult[]>([]);
@@ -70,8 +71,7 @@ export default function Settings() {
       if (!ok) return Alert.alert('Permiso denegado', 'Actívalo en Ajustes del sistema.');
       setNotifOn(true);
       await scheduleMileageAsk(store.currentVehicle()?.short ?? 'tu coche');
-      await sendDemoNotification();
-      Alert.alert('Activadas 🔔', 'Te llega una notificación de ejemplo en 3 segundos.');
+      await sendNotificationsEnabledConfirmation();
     } else setNotifOn(false);
   };
 

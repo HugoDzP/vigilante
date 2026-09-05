@@ -1,6 +1,6 @@
 // app/(tabs)/index.tsx — Dashboard
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, Pressable, ImageBackground, TextInput } from 'react-native';
+import { View, Text, ScrollView, Pressable, ImageBackground, TextInput, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +21,33 @@ export default function Dashboard() {
   useEffect(() => { if (car) store.refreshSummary(car.id); }, [car?.id]);
 
   if (!car) {
+    if (store.hydrating) {
+      return (
+        <LinearGradient colors={[T.bg1, T.bg0]} style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={T.mint} />
+          <Text style={{ color: T.steel, fontSize: 13, marginTop: 12 }}>Cargando tu garaje…</Text>
+        </LinearGradient>
+      );
+    }
+    if (store.hydrateFailed) {
+      return (
+        <LinearGradient colors={[T.bg1, T.bg0]} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, paddingHorizontal: 28 }}>
+          <Ionicons name="cloud-offline-outline" size={40} color={T.steelDim} />
+          <Text style={{ color: T.ink, fontSize: 16, fontWeight: '700', textAlign: 'center' }}>
+            No se pudo cargar tu garaje
+          </Text>
+          <Text style={{ color: T.steel, fontSize: 13, textAlign: 'center', lineHeight: 19, maxWidth: 260 }}>
+            Puede que el servidor tardara en despertar o falle la conexión. Tus datos siguen a salvo.
+          </Text>
+          <Pressable onPress={() => store.hydrateFromBackend()}
+            style={{ marginTop: 4, paddingHorizontal: 20, height: 46, borderRadius: 14, backgroundColor: T.mintDim,
+              alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}>
+            <Ionicons name="refresh" size={16} color={T.mint} />
+            <Text style={{ color: T.mint, fontSize: 13.5, fontWeight: '700' }}>Reintentar</Text>
+          </Pressable>
+        </LinearGradient>
+      );
+    }
     return (
       <LinearGradient colors={[T.bg1, T.bg0]} style={{ flex: 1 }}>
         <EmptyGarage />
