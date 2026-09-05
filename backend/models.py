@@ -52,14 +52,19 @@ class Vehicle(db.Model):
     eco_label = db.Column(db.String(5), nullable=True)       # override: B/C/ECO/0; null = auto
     photo_url = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    ai_summary = db.Column(db.Text, nullable=True)
+    ai_summary_at = db.Column(db.DateTime, nullable=True)
 
-    def to_dict(self):
-        return {
+    def to_dict(self, health: float | None = None):
+        d = {
             "id": self.id, "brand": self.brand, "model": self.model,
             "year": self.year, "plate": self.plate, "fuel": self.fuel,
             "hp": self.hp, "bodyType": self.body_type, "mileage": self.mileage,
             "label": self.eco_label, "photoUri": self.photo_url,
         }
+        if health is not None:
+            d["health"] = health
+        return d
 
 
 class LogEntry(db.Model):
@@ -107,6 +112,32 @@ class MaintenanceItem(db.Model):
     est_cost = db.Column(db.String(20), default="—")       # texto libre, p.ej. "~90 €"
     photos = db.Column(db.JSON, default=list)               # [{uri, sizeLabel}]
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def _health_score(self, vehicle_mileage: int, vehicle_year: int) -> float:
+        """Puntuación de salud de ESTE mantenimiento, de -0.5 (muy atrasado) a 1.0
+        (recién hecho). A diferencia de `_urgency` (que techa el progreso en 1.0
+        para las barras visuales), aquí NO se techa — así un mantenimiento que
+        lleva el doble de su intervalo de retraso pesa más que uno que acaba de
+        vencer. Es la pieza base para calcular la salud general del coche."""
+        if self.kind == "itv":
+            due, interval, exempt = itv_next_due(vehicle_year, self.last_done_date)
+            if exempt:
+                return 1.0
+            remaining_days = (due - date.today()).days
+            raw_progress = 1 - remaining_days / (interval * 365)
+            return max(-0.5, min(1.0, 1 - raw_progress))
+
+        if self.interval_km:
+            remaining_km = (self.last_done_km or 0) + self.interval_km - vehicle_mileage
+            raw_progress = 1 - remaining_km / self.interval_km
+            return max(-0.5, min(1.0, 1 - raw_progress))
+        if self.interval_days and self.last_done_date:
+            due2 = self.last_done_date + timedelta(days=self.interval_days)
+            remaining_days = (due2 - date.today()).days
+            raw_progress = 1 - remaining_days / self.interval_days
+            return max(-0.5, min(1.0, 1 - raw_progress))
+
+        return 1.0  # mantenimiento sin repetición (uno puntual) — no penaliza
 
     def _urgency(self, vehicle_mileage: int, vehicle_year: int):
         # ---- ITV: normativa real (exento 4 años, cada 2 hasta los 10, cada 1 después) ----
@@ -190,10 +221,12 @@ class MileageLog(db.Model):
     at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
-def default_maintenance_for(vehicle: "Vehicle") -> list[MaintenanceItem]:
+def default_maintenance_for(vehicle: "Vehicle", last_itv_date=None) -> list[MaintenanceItem]:
     """Mantenimientos típicos con los que arranca un vehículo recién añadido.
     Usa el kilometraje/fecha actuales como punto de partida — no sabemos su
-    historial real, así que no aparecen como urgentes desde el primer día."""
+    historial real, así que no aparecen como urgentes desde el primer día.
+    Si el usuario indica la fecha de su última ITV, se usa esa en vez de
+    calcular desde la matriculación (más preciso)."""
     items = []
     if vehicle.fuel != "Eléctrico":
         items.append(MaintenanceItem(
@@ -206,7 +239,7 @@ def default_maintenance_for(vehicle: "Vehicle") -> list[MaintenanceItem]:
     items.append(MaintenanceItem(
         user_id=vehicle.user_id, vehicle_id=vehicle.id, emoji="📅", kind="itv",
         title="ITV", detail="Exenta 4 años · luego cada 2 · anual a partir de los 10",
-        est_cost="~45 €",
+        est_cost="~45 €", last_done_date=last_itv_date,
         notes="Pide cita previa con antelación en tu estación más cercana.",
         cta_label="Pedir cita ITV",
     ))
@@ -218,6 +251,18 @@ def default_maintenance_for(vehicle: "Vehicle") -> list[MaintenanceItem]:
         cta_label="Marcar como hecho hoy",
     ))
     return items
+
+
+class Preference(db.Model):
+    """Ajustes personales del usuario — de momento, los umbrales a partir de los
+    cuales avisamos de un mantenimiento próximo. Uno por usuario."""
+    __tablename__ = "preferences"
+    user_id = db.Column(db.String(36), primary_key=True)
+    reminder_lead_km = db.Column(db.Integer, default=1000)
+    reminder_lead_days = db.Column(db.Integer, default=60)
+
+    def to_dict(self):
+        return {"reminderLeadKm": self.reminder_lead_km, "reminderLeadDays": self.reminder_lead_days}
 
 
 class Feedback(db.Model):

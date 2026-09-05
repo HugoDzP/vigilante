@@ -1,9 +1,10 @@
 # routes.py — endpoints /api/*
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from flask import Blueprint, request, jsonify, g
 from auth import require_auth
-from models import db, Vehicle, LogEntry, Workshop, MileageLog, MaintenanceItem, default_maintenance_for, Feedback
+from models import db, Vehicle, LogEntry, Workshop, MileageLog, MaintenanceItem, default_maintenance_for, Feedback, Preference
+from vehicle_summary import generate_vehicle_summary
 from ocr import parse_invoice_image
 from chat_parse import parse_maintenance_text
 from places import search_workshops
@@ -13,13 +14,28 @@ import requests
 api = Blueprint("api", __name__, url_prefix="/api")
 
 
+def compute_health(vehicle: Vehicle) -> float:
+    """Salud real del coche — se basa SOLO en el estado de sus mantenimientos
+    (cuánto falta o cuánto te has pasado de cada uno), nunca en el kilometraje
+    o la edad del coche en sí. Un coche de 150.000 km con todo al día puntúa
+    igual de bien que uno de 20.000 km — igual que a una persona no la juzgas
+    sana o no por su edad, sino por sus revisiones médicas.
+    Estar atrasado penaliza más que "estar en el límite", pero un solo
+    mantenimiento atrasado no hunde la nota entera: se promedia con el resto."""
+    items = MaintenanceItem.query.filter_by(vehicle_id=vehicle.id, user_id=vehicle.user_id).all()
+    if not items:
+        return 0.9  # sin mantenimientos todavía (raro, pero por si acaso) — valor neutro
+    scores = [it._health_score(vehicle.mileage, vehicle.year) for it in items]
+    return round(max(0.05, min(1.0, sum(scores) / len(scores))), 3)
+
+
 # ---------------- Vehículos ----------------
 
 @api.get("/vehicles")
 @require_auth
 def list_vehicles():
     vs = Vehicle.query.filter_by(user_id=g.user_id).order_by(Vehicle.created_at).all()
-    return jsonify([v.to_dict() for v in vs])
+    return jsonify([v.to_dict(health=compute_health(v)) for v in vs])
 
 
 @api.post("/vehicles")
@@ -36,10 +52,16 @@ def create_vehicle():
     )
     db.session.add(v)
     db.session.flush()  # asigna v.id antes de crear los mantenimientos que lo referencian
-    for item in default_maintenance_for(v):
+    last_itv = None
+    if d.get("lastItvDate"):
+        try:
+            last_itv = date.fromisoformat(d["lastItvDate"])
+        except ValueError:
+            pass
+    for item in default_maintenance_for(v, last_itv):
         db.session.add(item)
     db.session.commit()
-    return jsonify(v.to_dict()), 201
+    return jsonify(v.to_dict(health=compute_health(v))), 201
 
 
 @api.put("/vehicles/<vid>")
@@ -56,7 +78,7 @@ def update_vehicle(vid):
     if "hp" in d: v.hp = str(d["hp"])
     if "mileage" in d: v.mileage = int(d["mileage"] or 0)
     db.session.commit()
-    return jsonify(v.to_dict())
+    return jsonify(v.to_dict(health=compute_health(v)))
 
 
 # ---------------- Historial / mantenimientos ----------------
@@ -86,6 +108,38 @@ def list_maintenance(vid):
                        "cost": f"{p.cost:g} €"} for p in past]
         out.append(it.to_dict(v, past_dicts))
     return jsonify(out)
+
+
+@api.post("/vehicles/<vid>/maintenance")
+@require_auth
+def create_custom_maintenance(vid):
+    """Crea un mantenimiento personalizado (fuera de los 3 que se siembran
+    automáticamente) — usado desde el formulario 'Añadir a mano' de la app."""
+    v = Vehicle.query.filter_by(id=vid, user_id=g.user_id).first_or_404()
+    d = request.get_json(force=True)
+    title = (d.get("title") or "").strip()
+    if not title:
+        return jsonify(error="El título es obligatorio"), 400
+
+    it = MaintenanceItem(
+        user_id=g.user_id, vehicle_id=vid,
+        emoji=d.get("emoji") or "🔧", title=title,
+        detail=d.get("detail", ""), notes=d.get("notes", ""),
+        est_cost=d.get("estCost") or "—",
+        cta_label=d.get("ctaLabel") or "Marcar como hecho hoy",
+    )
+    interval_km = d.get("intervalKm")
+    interval_days = d.get("intervalDays")
+    if interval_km:
+        it.interval_km = int(interval_km)
+        it.last_done_km = int(d.get("lastDoneKm") or v.mileage)
+    if interval_days:
+        it.interval_days = int(interval_days)
+        it.last_done_date = date.fromisoformat(d["lastDoneDate"]) if d.get("lastDoneDate") else date.today()
+
+    db.session.add(it)
+    db.session.commit()
+    return jsonify(it.to_dict(v)), 201
 
 
 @api.put("/maintenance/<mid>")
@@ -186,7 +240,7 @@ def push_mileage():
     db.session.commit()
     # km/mes estimado a partir de las dos últimas lecturas
     monthly = _monthly_km(vid)
-    return jsonify(ok=True, mileage=km, monthlyKm=monthly)
+    return jsonify(ok=True, mileage=km, monthlyKm=monthly, health=compute_health(v))
 
 
 def _monthly_km(vid: str) -> int:
@@ -358,6 +412,7 @@ def delete_account():
 
     # 1) borra todos los datos del usuario en nuestra base de datos
     Feedback.query.filter_by(user_id=uid_).delete()
+    Preference.query.filter_by(user_id=uid_).delete()
     MileageLog.query.filter_by(user_id=uid_).delete()
     MaintenanceItem.query.filter_by(user_id=uid_).delete()
     LogEntry.query.filter_by(user_id=uid_).delete()
@@ -380,3 +435,51 @@ def delete_account():
             print(f"No se pudo borrar el usuario de Supabase Auth (datos ya borrados): {e}")
 
     return jsonify(ok=True)
+
+
+# ---------------- Resumen Vigilante (con IA, cacheado unas horas) ----------------
+
+SUMMARY_TTL = timedelta(hours=6)  # no regeneramos en cada apertura — Gemini cuesta y no hace falta tanta frecuencia
+
+@api.get("/vehicles/<vid>/summary")
+@require_auth
+def vehicle_summary(vid):
+    v = Vehicle.query.filter_by(id=vid, user_id=g.user_id).first_or_404()
+    fresh = v.ai_summary and v.ai_summary_at and (datetime.utcnow() - v.ai_summary_at) < SUMMARY_TTL
+    force = request.args.get("force") == "1"
+
+    if fresh and not force:
+        return jsonify(summary=v.ai_summary, cached=True)
+
+    items = MaintenanceItem.query.filter_by(vehicle_id=vid, user_id=g.user_id).all()
+    items_dicts = [it.to_dict(v) for it in items]
+    monthly = _monthly_km(vid)
+    v.ai_summary = generate_vehicle_summary(v.mileage, monthly, compute_health(v), items_dicts)
+    v.ai_summary_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify(summary=v.ai_summary, cached=False)
+
+
+# ---------------- Preferencias (umbrales de aviso personalizables) ----------------
+
+@api.get("/preferences")
+@require_auth
+def get_preferences():
+    p = Preference.query.get(g.user_id)
+    if not p:
+        p = Preference(user_id=g.user_id, reminder_lead_km=1000, reminder_lead_days=60)  # valores por defecto, sin guardar todavía
+    return jsonify(p.to_dict())
+
+
+@api.put("/preferences")
+@require_auth
+def update_preferences():
+    d = request.get_json(force=True)
+    p = Preference.query.get(g.user_id)
+    if not p:
+        p = Preference(user_id=g.user_id)
+        db.session.add(p)
+    if "reminderLeadKm" in d: p.reminder_lead_km = max(50, int(d["reminderLeadKm"]))
+    if "reminderLeadDays" in d: p.reminder_lead_days = max(1, int(d["reminderLeadDays"]))
+    db.session.commit()
+    return jsonify(p.to_dict())
