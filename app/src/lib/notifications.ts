@@ -28,6 +28,17 @@ export async function scheduleMaintenanceReminder(title: string, body: string, i
   });
 }
 
+/** Aviso al instante — para los mantenimientos por kilómetros: no se puede
+ * "programar una alarma para dentro de X km" (no existe ese trigger), así que
+ * esto se dispara de forma reactiva justo cuando el kilometraje real cruza el
+ * umbral, en vez de estimar una fecha aproximada. */
+export async function sendImmediateReminder(title: string, body: string) {
+  return Notifications.scheduleNotificationAsync({
+    content: { title: `🛡️ ${title}`, body, sound: false },
+    trigger: null, // null = disparo inmediato
+  });
+}
+
 /** Pregunta periódica de kilometraje cada 2 semanas */
 export async function scheduleMileageAsk(carName: string) {
   return Notifications.scheduleNotificationAsync({

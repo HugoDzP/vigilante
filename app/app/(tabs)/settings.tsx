@@ -23,6 +23,18 @@ export default function Settings() {
   const [results, setResults] = useState<PlaceResult[]>([]);
   const [placesError, setPlacesError] = useState<'not_configured' | 'other' | null>(null);
   const [manual, setManual] = useState({ name: '', address: '', phone: '' });
+  const [leadKmDraft, setLeadKmDraft] = useState(String(store.reminderLeadKm));
+  const [leadDaysDraft, setLeadDaysDraft] = useState(String(store.reminderLeadDays));
+  const [savedThresholds, setSavedThresholds] = useState(false);
+
+  const saveThresholds = async () => {
+    await store.updatePreferences({
+      reminderLeadKm: parseInt(leadKmDraft) || store.reminderLeadKm,
+      reminderLeadDays: parseInt(leadDaysDraft) || store.reminderLeadDays,
+    });
+    setSavedThresholds(true);
+    setTimeout(() => setSavedThresholds(false), 1800);
+  };
   const [deleting, setDeleting] = useState(false);
 
   const confirmDeleteAccount = () => {
@@ -89,7 +101,7 @@ export default function Settings() {
   return (
     <LinearGradient colors={[T.bg1, T.bg0]} style={{ flex: 1 }}>
       <ScrollView showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 64, paddingBottom: 140 }}>
+        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 64, paddingBottom: 28 }}>
 
         <Animated.View entering={FadeInUp.duration(500)}>
           <Eyebrow>Configuración</Eyebrow>
@@ -102,6 +114,33 @@ export default function Settings() {
             sub="Avisos por km o fecha + pregunta de kilometraje cada 2 semanas"
             right={<Switch value={notifOn} onValueChange={toggleNotif}
               trackColor={{ true: T.mint, false: 'rgba(116,138,176,0.25)' }} thumbColor="#fff" />} />
+
+          <View style={{ height: 1, backgroundColor: T.stroke, marginVertical: 14 }} />
+
+          <Text style={{ color: T.steel, fontSize: 12, marginBottom: 12, lineHeight: 17 }}>
+            Cuándo avisarte de un mantenimiento próximo:
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: T.steelDim, fontSize: 10.5, fontWeight: '700', letterSpacing: 1, marginBottom: 6 }}>
+                A CUÁNTOS KM
+              </Text>
+              <Field value={leadKmDraft} onChangeText={setLeadKmDraft} keyboardType="number-pad" placeholder="1000" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: T.steelDim, fontSize: 10.5, fontWeight: '700', letterSpacing: 1, marginBottom: 6 }}>
+                A CUÁNTOS DÍAS
+              </Text>
+              <Field value={leadDaysDraft} onChangeText={setLeadDaysDraft} keyboardType="number-pad" placeholder="60" />
+            </View>
+          </View>
+          <Pressable onPress={saveThresholds}
+            style={{ marginTop: 12, height: 40, borderRadius: 12, backgroundColor: T.mintDim,
+              alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: T.mint, fontSize: 12.5, fontWeight: '700' }}>
+              {savedThresholds ? '✓ Guardado' : 'Guardar umbrales'}
+            </Text>
+          </Pressable>
         </Card>
 
         <SectionLabel>Talleres favoritos · {store.workshops.length} guardados</SectionLabel>
@@ -176,7 +215,7 @@ export default function Settings() {
         <SectionLabel>Cuenta</SectionLabel>
         <Card style={{ padding: 16 }}>
           <Row icon="☁️" iconBg="rgba(77,141,255,0.12)"
-            title={DEMO_MODE ? 'Modo demo' : demo ? 'Sesión de invitado' : 'Sincronizado con Supabase'}
+            title={DEMO_MODE ? 'Modo demo' : demo ? 'Sesión de invitado' : 'Sincronizado con la nube'}
             sub={DEMO_MODE ? 'Configura .env para activar cuentas y nube' : 'Tus datos viajan contigo'}
             right={
               <Pressable onPress={signOut} style={{ paddingHorizontal: 12, paddingVertical: 7,

@@ -1,5 +1,5 @@
 // app/(tabs)/index.tsx — Dashboard
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, Pressable, ImageBackground, TextInput } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -9,7 +9,7 @@ import { T } from '../../src/theme';
 import { useVigilante } from '../../src/store';
 import { pickAndCompress } from '../../src/lib/images';
 import { sync, HAS_BACKEND } from '../../src/lib/api';
-import { Card, HealthGauge, MaintenanceCard, GarageSwitcher, Eyebrow, ScreenTitle, EcoBadge, EmptyGarage, PulseRing } from '../../src/components';
+import { Card, HealthGauge, MaintenanceCard, GarageSwitcher, Eyebrow, ScreenTitle, EcoBadge, EmptyGarage, PulseRing, timeGreeting } from '../../src/components';
 
 const fmt = (n: number) => n.toLocaleString('es-ES');
 
@@ -17,6 +17,8 @@ export default function Dashboard() {
   const store = useVigilante();
   const car = store.currentVehicle();
   const [kmDraft, setKmDraft] = useState('');
+
+  useEffect(() => { if (car) store.refreshSummary(car.id); }, [car?.id]);
 
   if (!car) {
     return (
@@ -40,16 +42,23 @@ export default function Dashboard() {
     if (!v) return;
     store.updateMileage(car.id, v);
     setKmDraft('');
-    if (HAS_BACKEND) sync.pushMileage(car.id, v).catch(() => {});
+    if (HAS_BACKEND) {
+      sync.pushMileage(car.id, v)
+        .then((res: any) => {
+          if (typeof res?.health === 'number') store.setVehicleHealth(car.id, res.health);
+          store.refreshMaintenance(car.id); // recalcula "restantes" y dispara avisos si toca
+        })
+        .catch(() => {});
+    }
   };
 
   return (
     <LinearGradient colors={[T.bg1, T.bg0]} style={{ flex: 1 }}>
       <ScrollView showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 64, paddingBottom: 140 }}>
+        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 64, paddingBottom: 28 }}>
 
         <Animated.View entering={FadeInUp.duration(500)}>
-          <Eyebrow>Buenos días, Hugo</Eyebrow>
+          <Eyebrow>{timeGreeting()}</Eyebrow>
           <ScreenTitle>Tu garaje</ScreenTitle>
         </Animated.View>
 
@@ -197,6 +206,11 @@ export default function Dashboard() {
           style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline',
             marginBottom: 12, marginTop: 4 }}>
           <Text style={{ color: T.ink, fontSize: 16, fontWeight: '700' }}>Próximos mantenimientos</Text>
+          <Pressable onPress={() => router.push('/maintenance/new')}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Ionicons name="add-circle" size={16} color={T.accent} />
+            <Text style={{ color: T.accent, fontSize: 12.5, fontWeight: '600' }}>Añadir</Text>
+          </Pressable>
         </Animated.View>
 
         {items.map((m, i) => (

@@ -1,6 +1,6 @@
 // app/vehicle/form.tsx — añadir / editar vehículo
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, Image, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, ScrollView, Pressable, Image, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,18 @@ import { FUELS, ecoFromSpecs, ECO_META, type Fuel, type EcoCode } from '../../sr
 import { Card, Field, Eyebrow, EcoBadge, Segmented } from '../../src/components';
 
 const LABEL_OPTIONS = ['Auto', 'B', 'C', 'ECO', '0'] as const;
+
+/** Acepta DD-MM-AAAA o DD/MM/AAAA (el formato natural en España) y lo convierte
+ * a AAAA-MM-DD (ISO) por dentro, que es lo que espera el backend. Devuelve
+ * null si el texto no tiene una forma de fecha válida. */
+function parseSpanishDate(input: string): string | null {
+  const m = input.trim().match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (!m) return null;
+  const [, d, mo, y] = m;
+  const day = parseInt(d), month = parseInt(mo);
+  if (day < 1 || day > 31 || month < 1 || month > 12) return null;
+  return `${y}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
 
 export default function VehicleForm() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -26,6 +38,7 @@ export default function VehicleForm() {
   const [fuel, setFuel] = useState<Fuel>(editing?.fuel ?? 'Diésel');
   const [hp, setHp] = useState(editing ? String(editing.hp) : '');
   const [bodyType, setBodyType] = useState(editing?.bodyType ?? '');
+  const [lastItvDate, setLastItvDate] = useState(''); // solo relevante al crear
   const [labelChoice, setLabelChoice] = useState<(typeof LABEL_OPTIONS)[number]>(
     editing?.label ? (editing.label as any) : 'Auto'
   );
@@ -37,9 +50,23 @@ export default function VehicleForm() {
     if (img) setPhotoUri(img.remoteUrl ?? img.uri);
   };
 
-  const save = () => {
-    if (!brand.trim()) return;
-    store.upsertVehicle({
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (!brand.trim() || saving) return;
+
+    let lastItvIso: string | undefined;
+    if (!editing && lastItvDate.trim()) {
+      const parsed = parseSpanishDate(lastItvDate);
+      if (!parsed) {
+        Alert.alert('Fecha no válida', 'Escríbela como día-mes-año, por ejemplo 15-07-2026.');
+        return;
+      }
+      lastItvIso = parsed;
+    }
+
+    setSaving(true);
+    await store.upsertVehicleAndWait({
       id: editing?.id,
       brand: brand.trim(), model: model.trim(),
       year: parseInt(year) || new Date().getFullYear(),
@@ -50,7 +77,9 @@ export default function VehicleForm() {
       health: editing?.health ?? 0.9,
       label: labelChoice === 'Auto' ? null : (labelChoice as EcoCode),
       photoUri,
+      ...(lastItvIso ? { lastItvDate: lastItvIso } : {}),
     } as any);
+    setSaving(false);
     router.back();
   };
 
@@ -118,6 +147,17 @@ export default function VehicleForm() {
           <Lbl>Kilometraje actual</Lbl>
           <Field value={km} onChangeText={setKm} placeholder="128450" keyboardType="number-pad" />
 
+          {!editing && (
+            <>
+              <Lbl>¿Cuándo pasaste la última ITV? (opcional)</Lbl>
+              <Field value={lastItvDate} onChangeText={setLastItvDate} placeholder="DD-MM-AAAA, ej. 15-07-2026" keyboardType="number-pad" />
+              <Text style={{ color: T.steelDim, fontSize: 10.5, marginTop: 6, lineHeight: 15 }}>
+                Si no lo sabes o el coche es nuevo, déjalo en blanco — calcularemos la fecha
+                según el año de matriculación y la normativa española.
+              </Text>
+            </>
+          )}
+
           <Lbl>Combustible</Lbl>
           <Segmented options={FUELS} value={fuel} onChange={setFuel} />
 
@@ -143,12 +183,12 @@ export default function VehicleForm() {
             </View>
           </View>
 
-          <Pressable onPress={save}
-            style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.97 : 1 }], marginTop: 24 })}>
+          <Pressable onPress={save} disabled={saving}
+            style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.97 : 1 }], marginTop: 24, opacity: saving ? 0.7 : 1 })}>
             <LinearGradient colors={[T.mint, '#1FC987']}
               style={{ height: 52, borderRadius: 18, alignItems: 'center', justifyContent: 'center', ...glowMint }}>
               <Text style={{ color: '#06281B', fontSize: 15, fontWeight: '700' }}>
-                {editing ? 'Guardar cambios' : 'Guardar vehículo'}
+                {saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Guardar vehículo'}
               </Text>
             </LinearGradient>
           </Pressable>

@@ -22,6 +22,15 @@ export function Card({ children, style }: { children: React.ReactNode; style?: V
   );
 }
 
+/** Saludo según la hora — no usamos el nombre porque aún no lo pedimos al registrarse. */
+export function timeGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 6) return 'Buenas noches';
+  if (h < 13) return 'Buenos días';
+  if (h < 20) return 'Buenas tardes';
+  return 'Buenas noches';
+}
+
 export function Eyebrow({ children }: { children: string }) {
   return <Text style={{ color: T.steelDim, fontSize: 10.5, fontWeight: '700', letterSpacing: 2.4, textTransform: 'uppercase' }}>{children}</Text>;
 }

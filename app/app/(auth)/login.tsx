@@ -63,7 +63,7 @@ export default function Login() {
 
         <Pressable onPress={enterDemo} style={{ marginTop: 28, alignItems: 'center' }}>
           <Text style={{ color: T.steelDim, fontSize: 12.5, fontWeight: '600' }}>
-            {DEMO_MODE ? '🚀 Probar en modo demo (sin backend)' : 'Probar sin cuenta'}
+            Probar sin cuenta
           </Text>
         </Pressable>
       </KeyboardAvoidingView>

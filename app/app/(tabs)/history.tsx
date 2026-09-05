@@ -79,7 +79,7 @@ export default function History() {
   return (
     <LinearGradient colors={[T.bg1, T.bg0]} style={{ flex: 1 }}>
       <ScrollView showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 64, paddingBottom: 140 }}>
+        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 64, paddingBottom: 28 }}>
 
         <Animated.View entering={FadeInUp.duration(500)}>
           <Eyebrow>{car.name}</Eyebrow>

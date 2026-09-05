@@ -4,6 +4,7 @@ import type { Level } from './theme';
 import type { Fuel, EcoCode } from './lib/eco';
 import { sync, HAS_BACKEND } from './lib/api';
 import { getAccessToken } from './lib/supabase';
+import { sendImmediateReminder } from './lib/notifications';
 
 export interface Vehicle {
   id: string; name: string; short: string; initial: string;
@@ -37,6 +38,12 @@ interface S {
   vehicles: Vehicle[]; currentVehicleId: string;
   maintenance: MaintenanceItem[]; history: LogEntry[]; workshops: Workshop[];
   mileageAskDismissed: Record<string, boolean>;
+  notifiedLowKm: Record<string, boolean>; // qué mantenimientos por km ya avisaron en este ciclo
+  reminderLeadKm: number;
+  reminderLeadDays: number;
+  loadPreferences: () => Promise<void>;
+  updatePreferences: (p: { reminderLeadKm?: number; reminderLeadDays?: number }) => Promise<void>;
+  refreshSummary: (vehicleId: string, force?: boolean) => Promise<void>;
   hydrated: boolean;                 // true una vez cargados datos reales del backend
   historyLoaded: Record<string, boolean>;
   maintenanceLoaded: Record<string, boolean>;
@@ -47,14 +54,21 @@ interface S {
 
   switchVehicle: (id: string) => void;
   upsertVehicle: (v: Omit<Vehicle, 'id' | 'summary'> & { id?: string }) => string;
+  /** Se resuelve cuando el backend confirma (vehículo + sus mantenimientos reales
+   * ya cargados) — o de inmediato si no hay backend. Úsalo para no navegar hacia
+   * atrás mientras solo hay datos provisionales en pantalla. */
+  upsertVehicleAndWait: (v: Omit<Vehicle, 'id' | 'summary'> & { id?: string }) => Promise<string>;
   remapVehicleId: (oldId: string, newId: string) => void;
   setVehiclePhoto: (id: string, uri?: string) => void;
+  setVehicleHealth: (id: string, health: number) => void;
   updateMileage: (id: string, km: number) => void;
   dismissMileageAsk: (id: string) => void;
+  checkAndNotifyLowRemaining: (vehicleId: string) => Promise<void>;
 
   addPhoto: (mid: string, p: { uri: string; sizeLabel: string }) => void;
   removePhoto: (mid: string, index: number) => void;
   assignWorkshop: (mid: string, name: string | null) => void;
+  updateNotes: (mid: string, notes: string) => void;
   markDone: (mid: string) => void;
   addLog: (e: Omit<LogEntry, 'id'>) => void;
 
@@ -65,6 +79,10 @@ interface S {
   loadHistoryFor: (vehicleId: string) => Promise<void>;
   loadMaintenanceFor: (vehicleId: string) => Promise<void>;
   refreshMaintenance: (vehicleId: string) => Promise<void>;
+  addCustomMaintenance: (vehicleId: string, item: {
+    title: string; emoji: string; detail?: string; notes?: string; estCost?: string;
+    intervalKm?: number; intervalDays?: number; lastDoneKm?: number; lastDoneDate?: string;
+  }) => Promise<void>;
   resetToDemo: () => void;
 }
 
@@ -158,6 +176,9 @@ export const useVigilante = create<S>((set, get) => ({
   ...demoSeed(),
   currentVehicleId: 'merc',
   mileageAskDismissed: {},
+  notifiedLowKm: {},
+  reminderLeadKm: 1000,
+  reminderLeadDays: 60,
   hydrated: false,
   historyLoaded: {},
   maintenanceLoaded: {},
@@ -209,6 +230,7 @@ export const useVigilante = create<S>((set, get) => ({
         brand: v.brand, model: v.model, year: v.year, plate: v.plate,
         fuel: v.fuel, hp: v.hp, bodyType: v.bodyType, mileage: v.mileage,
         label: v.label, photoUri: v.photoUri,
+        ...((v as any).lastItvDate ? { lastItvDate: (v as any).lastItvDate } : {}),
       };
       if (isNew) {
         sync.createVehicle(payload)
@@ -231,8 +253,47 @@ export const useVigilante = create<S>((set, get) => ({
     currentVehicleId: s.currentVehicleId === oldId ? newId : s.currentVehicleId,
   })),
 
+  upsertVehicleAndWait: async (v) => {
+    const isNew = !v.id;
+    if (!HAS_BACKEND || !isNew) {
+      // Edición, o sin backend: no hay nada real que esperar — comportamiento de siempre.
+      return get().upsertVehicle(v);
+    }
+    // Creación con backend real: mandamos directamente al servidor y esperamos
+    // su respuesta (vehículo + mantenimientos ya calculados de verdad), en vez
+    // de mostrar primero un provisional con guiones y corregirlo después.
+    const payload = {
+      brand: v.brand, model: v.model, year: v.year, plate: v.plate,
+      fuel: v.fuel, hp: v.hp, bodyType: v.bodyType, mileage: v.mileage,
+      label: v.label, photoUri: v.photoUri,
+      ...((v as any).lastItvDate ? { lastItvDate: (v as any).lastItvDate } : {}),
+    };
+    try {
+      const res: any = await sync.createVehicle(payload);
+      const realId = res.id;
+      const vehicle: Vehicle = {
+        id: realId, name: `${v.brand} ${v.model}`.trim(), short: v.brand,
+        initial: v.brand.charAt(0).toUpperCase(),
+        brand: v.brand, model: v.model, year: v.year, plate: v.plate,
+        fuel: v.fuel, hp: v.hp, bodyType: v.bodyType, mileage: v.mileage,
+        health: res.health ?? 0.9, monthlyKm: 0, label: v.label, photoUri: v.photoUri,
+        summary: 'Registra tu primer mantenimiento desde el Chat y empiezo a vigilarlo. 🛡️',
+      };
+      set(s => ({ vehicles: [...s.vehicles, vehicle], currentVehicleId: realId }));
+      await get().loadMaintenanceFor(realId);
+      get().refreshSummary(realId); // no bloquea — se actualiza en cuanto llegue
+      return realId;
+    } catch (e) {
+      console.warn('No se pudo crear el vehículo en el backend, se guarda solo en local:', e);
+      return get().upsertVehicle(v); // red de seguridad: al menos que no se pierda el dato
+    }
+  },
+
   setVehiclePhoto: (id, uri) =>
     set(s => ({ vehicles: s.vehicles.map(v => (v.id === id ? { ...v, photoUri: uri } : v)) })),
+
+  setVehicleHealth: (id, health) =>
+    set(s => ({ vehicles: s.vehicles.map(v => (v.id === id ? { ...v, health } : v)) })),
 
   updateMileage: (id, km) =>
     set(s => ({
@@ -242,6 +303,62 @@ export const useVigilante = create<S>((set, get) => ({
 
   dismissMileageAsk: id =>
     set(s => ({ mileageAskDismissed: { ...s.mileageAskDismissed, [id]: true } })),
+
+  checkAndNotifyLowRemaining: async (vehicleId: string) => {
+    const { maintenance, notifiedLowKm, reminderLeadKm } = get();
+    for (const it of maintenance) {
+      if (it.vehicleId !== vehicleId) continue;
+      if (!it.remainingText.includes('km')) continue; // solo nos interesan los de kilómetros aquí
+      const remaining = parseInt(it.remainingText.replace(/[^\d]/g, ''), 10);
+      if (Number.isNaN(remaining)) continue;
+
+      if (remaining <= reminderLeadKm) {
+        if (!notifiedLowKm[it.id]) {
+          await sendImmediateReminder(it.title, `Solo quedan ${it.remainingText} — ${it.detail || 'toca para ver el detalle'}.`);
+          set(s => ({ notifiedLowKm: { ...s.notifiedLowKm, [it.id]: true } }));
+        }
+      } else if (notifiedLowKm[it.id]) {
+        // volvió a subir el margen (p.ej. tras marcarlo hecho) — permite avisar otra vez en el futuro
+        set(s => ({ notifiedLowKm: { ...s.notifiedLowKm, [it.id]: false } }));
+      }
+    }
+  },
+
+  loadPreferences: async () => {
+    if (!HAS_BACKEND) return;
+    try {
+      const p: any = await sync.preferences();
+      set({
+        reminderLeadKm: typeof p.reminderLeadKm === 'number' ? p.reminderLeadKm : 1000,
+        reminderLeadDays: typeof p.reminderLeadDays === 'number' ? p.reminderLeadDays : 60,
+      });
+    } catch (e) {
+      console.warn('No se pudieron cargar las preferencias:', e);
+    }
+  },
+
+  updatePreferences: async (p) => {
+    set(s => ({
+      reminderLeadKm: p.reminderLeadKm ?? s.reminderLeadKm,
+      reminderLeadDays: p.reminderLeadDays ?? s.reminderLeadDays,
+    }));
+    if (HAS_BACKEND) {
+      try { await sync.updatePreferences(p); }
+      catch (e) { console.warn('No se pudieron guardar las preferencias en el backend:', e); }
+    }
+  },
+
+  refreshSummary: async (vehicleId, force = false) => {
+    if (!HAS_BACKEND) return;
+    try {
+      const res: any = await sync.vehicleSummary(vehicleId, force);
+      if (res?.summary) {
+        set(s => ({ vehicles: s.vehicles.map(v => (v.id === vehicleId ? { ...v, summary: res.summary } : v)) }));
+      }
+    } catch (e) {
+      console.warn('No se pudo cargar el Resumen Vigilante:', e);
+    }
+  },
 
   addPhoto: (mid, p) => {
     set(s => ({ maintenance: s.maintenance.map(m => (m.id === mid ? { ...m, photos: [...m.photos, p] } : m)) }));
@@ -262,6 +379,11 @@ export const useVigilante = create<S>((set, get) => ({
     if (HAS_BACKEND) sync.updateMaintenance(mid, { workshop: name }).catch(e => console.warn('No se pudo asignar el taller:', e));
   },
 
+  updateNotes: (mid, notes) => {
+    set(s => ({ maintenance: s.maintenance.map(m => (m.id === mid ? { ...m, notes } : m)) }));
+    if (HAS_BACKEND) sync.updateMaintenance(mid, { notes }).catch(e => console.warn('No se pudieron guardar las notas:', e));
+  },
+
   addLog: e => set(s => ({ history: [{ ...e, id: `h${Date.now()}` }, ...s.history] })),
 
   markDone: mid => {
@@ -279,6 +401,7 @@ export const useVigilante = create<S>((set, get) => ({
       maintenance: s.maintenance.map(x =>
         x.id === mid ? { ...x, progress: 0.02, level: 'ok' as Level, remainingText: '✓ hoy' } : x
       ),
+      notifiedLowKm: { ...s.notifiedLowKm, [mid]: false },
     }));
     if (HAS_BACKEND) {
       sync.maintenanceDone(mid)
@@ -313,7 +436,7 @@ export const useVigilante = create<S>((set, get) => ({
         initial: (v.brand?.[0] ?? '?').toUpperCase(),
         brand: v.brand, model: v.model, year: v.year, plate: v.plate,
         fuel: v.fuel, hp: v.hp, bodyType: v.bodyType, mileage: v.mileage,
-        health: 0.9, monthlyKm: 0, label: v.label, photoUri: v.photoUri,
+        health: typeof v.health === 'number' ? v.health : 0.9, monthlyKm: 0, label: v.label, photoUri: v.photoUri,
         summary: 'Registra tu primer mantenimiento desde el Chat y empiezo a vigilarlo. 🛡️',
       }));
 
@@ -327,6 +450,7 @@ export const useVigilante = create<S>((set, get) => ({
         maintenance: [], history: [], historyLoaded: {}, maintenanceLoaded: {},
         hydrated: true,
       });
+      get().loadPreferences(); // en paralelo, no bloquea el arranque
     } catch (e) {
       console.warn('No se pudo cargar el garaje del backend:', e);
     }
@@ -377,9 +501,33 @@ export const useVigilante = create<S>((set, get) => ({
     try {
       const raw = await sync.maintenance(vehicleId) as MaintenanceItem[];
       set(s => ({ maintenance: [...s.maintenance.filter(m => m.vehicleId !== vehicleId), ...raw] }));
+      get().checkAndNotifyLowRemaining(vehicleId);
     } catch (e) {
       console.warn('No se pudo refrescar el mantenimiento:', e);
     }
+  },
+
+  addCustomMaintenance: async (vehicleId, item) => {
+    if (HAS_BACKEND) {
+      try {
+        await sync.createMaintenance(vehicleId, item);
+        await get().refreshMaintenance(vehicleId);
+        return;
+      } catch (e) {
+        console.warn('No se pudo crear el mantenimiento en el backend:', e);
+      }
+    }
+    // Sin backend (modo demo): lo añadimos solo en local
+    const car = get().vehicles.find(v => v.id === vehicleId);
+    set(s => ({
+      maintenance: [...s.maintenance, {
+        id: `m${Date.now()}`, vehicleId, emoji: item.emoji, title: item.title,
+        detail: item.detail ?? '', remainingText: '—', progress: 0, level: 'ok' as Level,
+        stats: [['—', 'Restantes'], [item.estCost ?? '—', 'Coste estimado']],
+        notes: item.notes ?? '', photos: [], workshop: null, pastOccurrences: [],
+        ctaLabel: 'Marcar como hecho hoy',
+      }],
+    }));
   },
 
   resetToDemo: () => set({ ...demoSeed(), currentVehicleId: 'merc', hydrated: false, historyLoaded: {}, maintenanceLoaded: {} }),

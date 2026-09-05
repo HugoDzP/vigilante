@@ -8,7 +8,7 @@ import { T, glowMint } from '../../src/theme';
 import { useVigilante } from '../../src/store';
 import { parseText, parseInvoice, HAS_BACKEND, sync } from '../../src/lib/api';
 import { pickAndCompress, toBase64 } from '../../src/lib/images';
-import { Card, Eyebrow, ScreenTitle, EmptyGarage } from '../../src/components';
+import { Card, Eyebrow, ScreenTitle, EmptyGarage, timeGreeting } from '../../src/components';
 
 type Msg =
   | { id: string; kind: 'text'; text: string; isUser: boolean }
@@ -35,7 +35,7 @@ export default function Chat() {
   const [draft, setDraft] = useState('');
   const [msgs, setMsgs] = useState<Msg[]>([
     { id: mid(), kind: 'text', isUser: false,
-      text: `Hola Hugo 👋 Cuéntame qué le has hecho al ${car?.short ?? 'tu coche'}, o sube una foto de la factura 🧾 y saco los datos.` },
+      text: `${timeGreeting()} 👋 Cuéntame qué le has hecho ${car?.short ? `al ${car.short}` : 'a tu coche'}, o sube una foto de la factura 🧾 y saco los datos.` },
   ]);
 
   if (!car) {
@@ -198,7 +198,7 @@ export default function Chat() {
             es un precio pequeño y aceptable frente a tapar el campo por completo. */}
         <View style={{ flexDirection: 'row', gap: 9, alignItems: 'center',
           paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10,
-          marginBottom: keyboardVisible ? 10 : 96 }}>
+          marginBottom: keyboardVisible ? 10 : 12 }}>
           <Pressable onPress={attachInvoice}
             style={{ width: 48, height: 48, borderRadius: 24, borderWidth: 1, borderColor: T.stroke,
               backgroundColor: 'rgba(13,21,37,0.88)', alignItems: 'center', justifyContent: 'center' }}>

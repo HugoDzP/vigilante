@@ -1,6 +1,6 @@
 // app/maintenance/[id].tsx — detalle de mantenimiento (modal sheet)
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, Image, Alert } from 'react-native';
+import { View, Text, ScrollView, Pressable, Image, Alert, TextInput } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,11 +11,29 @@ import { pickAndCompress } from '../../src/lib/images';
 import { scheduleMaintenanceReminder } from '../../src/lib/notifications';
 import { Card } from '../../src/components';
 
+/** Calcula en cuántos días programar el aviso, a partir del texto ya calculado
+ * ("92 días" o "1.550 km"). Con fecha, avisa `leadDays` antes de que toque.
+ * Con kilómetros, estima el ritmo de uso del coche para traducirlo a días
+ * aproximados (aunque para km lo normal es que se use el aviso reactivo, no
+ * este cálculo — se deja como respaldo). */
+function reminderDaysFromNow(remainingText: string, monthlyKm: number, leadDays: number): number {
+  const isDays = remainingText.includes('día');
+  const num = parseInt(remainingText.replace(/[^\d]/g, ''), 10);
+  if (!num || Number.isNaN(num)) return 14; // no se pudo calcular, aviso genérico en 2 semanas
+
+  if (isDays) return Math.max(1, num - leadDays);
+  if (monthlyKm > 0) return Math.max(1, Math.round((num / monthlyKm) * 30 - 14));
+  return 14;
+}
+
 export default function MaintenanceDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const store = useVigilante();
   const item = store.maintenance.find(m => m.id === id);
+  const car = store.currentVehicle();
   const [done, setDone] = useState(false);
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesDraft, setNotesDraft] = useState(item?.notes ?? '');
 
   if (!item) {
     return (
@@ -41,8 +59,22 @@ export default function MaintenanceDetail() {
       setDone(true);
       setTimeout(() => router.back(), 700);
     } else if (item.ctaLabel.startsWith('Programar')) {
-      await scheduleMaintenanceReminder(item.title, `${item.remainingText} restantes — toca para ver el detalle.`, 7);
-      Alert.alert('Recordatorio programado ⏰', 'Te avisaré en 7 días.');
+      const isKm = item.remainingText.includes('km');
+      if (isKm) {
+        // Por km no se puede "programar para dentro de X km" — no existe ese
+        // disparador. Se avisa solo, de forma reactiva, en cuanto el
+        // kilometraje real cruce el umbral (se comprueba cada vez que
+        // actualizas los km desde el Dashboard).
+        await store.checkAndNotifyLowRemaining(item.vehicleId);
+        Alert.alert(
+          'Aviso automático activado 📍',
+          `Te avisaré solo, sin que tengas que hacer nada más, en cuanto a ${car?.short ?? 'tu coche'} le queden menos de ${store.reminderLeadKm.toLocaleString('es-ES')} km para este mantenimiento — se comprueba cada vez que actualizas el kilometraje. Puedes cambiar este umbral en Ajustes.`,
+        );
+      } else {
+        const days = reminderDaysFromNow(item.remainingText, car?.monthlyKm ?? 0, store.reminderLeadDays);
+        await scheduleMaintenanceReminder(item.title, `${item.remainingText} restantes — toca para ver el detalle.`, days);
+        Alert.alert('Recordatorio programado ⏰', days <= 1 ? 'Te avisaré mañana.' : `Te avisaré en ${days} días, antes de que toque.`);
+      }
     } else {
       router.back();
     }
@@ -145,10 +177,44 @@ export default function MaintenanceDetail() {
 
         {/* Notas */}
         <Animated.View entering={FadeInUp.delay(150).duration(450)}>
-          <Sec title="Notas" />
-          <Card style={{ padding: 16 }}>
-            <Text style={{ color: T.ink2, fontSize: 13, lineHeight: 21 }}>{item.notes}</Text>
-          </Card>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 18, marginBottom: 10 }}>
+            <Text style={{ color: T.ink, fontSize: 13, fontWeight: '700' }}>Notas</Text>
+            {!editingNotes && (
+              <Pressable onPress={() => { setNotesDraft(item.notes); setEditingNotes(true); }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Ionicons name="pencil" size={13} color={T.accent} />
+                <Text style={{ color: T.accent, fontSize: 12, fontWeight: '600' }}>Editar</Text>
+              </Pressable>
+            )}
+          </View>
+          {editingNotes ? (
+            <View>
+              <TextInput
+                value={notesDraft} onChangeText={setNotesDraft} multiline autoFocus
+                placeholder="Escribe aquí tus notas…" placeholderTextColor={T.steelDim}
+                style={{ minHeight: 100, borderRadius: 16, borderWidth: 1, borderColor: T.accent,
+                  backgroundColor: T.card, padding: 16, color: T.ink, fontSize: 13, lineHeight: 21, textAlignVertical: 'top' }}
+              />
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                <Pressable onPress={() => setEditingNotes(false)}
+                  style={{ flex: 1, height: 42, borderRadius: 12, borderWidth: 1, borderColor: T.stroke,
+                    alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: T.ink2, fontSize: 13, fontWeight: '600' }}>Cancelar</Text>
+                </Pressable>
+                <Pressable onPress={() => { store.updateNotes(item.id, notesDraft.trim()); setEditingNotes(false); }}
+                  style={{ flex: 1, height: 42, borderRadius: 12, backgroundColor: T.mint,
+                    alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: '#06281B', fontSize: 13, fontWeight: '700' }}>Guardar</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <Card style={{ padding: 16 }}>
+              <Text style={{ color: T.ink2, fontSize: 13, lineHeight: 21 }}>
+                {item.notes || 'Sin notas todavía — toca «Editar» para añadir algo.'}
+              </Text>
+            </Card>
+          )}
         </Animated.View>
 
         {/* Veces anteriores */}

@@ -101,6 +101,12 @@ export async function searchPlaces(query: string): Promise<PlaceResult[]> {
 export const sync = {
   vehicles: () => req('/api/vehicles'),
   createVehicle: (v: unknown) => req('/api/vehicles', { method: 'POST', body: JSON.stringify(v) }),
+  vehicleSummary: (vehicleId: string, force = false) =>
+    req(`/api/vehicles/${vehicleId}/summary${force ? '?force=1' : ''}`),
+
+  preferences: () => req('/api/preferences'),
+  updatePreferences: (p: { reminderLeadKm?: number; reminderLeadDays?: number }) =>
+    req('/api/preferences', { method: 'PUT', body: JSON.stringify(p) }),
   updateVehicle: (id: string, v: unknown) => req(`/api/vehicles/${id}`, { method: 'PUT', body: JSON.stringify(v) }),
 
   workshops: () => req('/api/workshops'),
@@ -113,6 +119,8 @@ export const sync = {
 
   // Predicciones de mantenimiento
   maintenance: (vehicleId: string) => req(`/api/vehicles/${vehicleId}/maintenance`),
+  createMaintenance: (vehicleId: string, item: unknown) =>
+    req(`/api/vehicles/${vehicleId}/maintenance`, { method: 'POST', body: JSON.stringify(item) }),
   updateMaintenance: (id: string, v: unknown) => req(`/api/maintenance/${id}`, { method: 'PUT', body: JSON.stringify(v) }),
   addMaintenancePhoto: (id: string, photo: { uri: string; sizeLabel: string }) =>
     req(`/api/maintenance/${id}/photos`, { method: 'POST', body: JSON.stringify(photo) }),
